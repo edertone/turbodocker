@@ -1,14 +1,16 @@
 FROM alpine:3.22
-
 # Install system dependencies including Node.js and Chromium
 RUN apk add --no-cache \
     chromium \
     nss \
     ca-certificates \
-    ttf-freefont \
     nodejs \
     ghostscript \
     poppler-utils \
+    font-noto \
+    font-noto-cjk \
+    font-noto-emoji \
+    font-noto-extra \
     && adduser -D converter
 
 # Set working directory
