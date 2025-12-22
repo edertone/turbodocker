@@ -91,34 +91,48 @@ async function isValidPdf(pdfBuffer) {
     if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
         return false;
     }
-    // Try to use pdfinfo to parse the file
-    const tmpDir = os.tmpdir();
-    const tmpFile = path.join(tmpDir, `pdfvalid_${crypto.randomUUID()}.pdf`);
+    
+    // Use pdfinfo with stdin to validate the PDF
     try {
-        await fs.writeFile(tmpFile, pdfBuffer);
-        try {
-            execSync(`pdfinfo "${tmpFile}"`);
-            return true;
-        } catch {
-            return false;
-        }
-    } finally {
-        fs.unlink(tmpFile).catch(() => {});
+        await new Promise((resolve, reject) => {
+            const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
+                if (error) {
+                    return reject(error);
+                }
+                resolve(stdout);
+            });
+            
+            // Write PDF buffer to stdin and close it
+            child.stdin.write(pdfBuffer);
+            child.stdin.end();
+        });
+        return true;
+    } catch {
+        return false;
     }
 }
 
 // Count PDF pages using pdfinfo
 async function countPdfPagesWithPdfinfo(pdfBuffer) {
-    const tmpDir = os.tmpdir();
-    const tmpFile = path.join(tmpDir, `pdfinfo_${crypto.randomUUID()}.pdf`);
     try {
-        await fs.writeFile(tmpFile, pdfBuffer);
-        const output = execSync(`pdfinfo "${tmpFile}"`).toString();
+        const output = await new Promise((resolve, reject) => {
+            const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
+                if (error) {
+                    return reject(new Error(`Could not determine page count: ${stderr}`));
+                }
+                resolve(stdout);
+            });
+            
+            // Write PDF buffer to stdin and close it
+            child.stdin.write(pdfBuffer);
+            child.stdin.end();
+        });
+        
         const match = output.match(/^Pages:\s+(\d+)/m);
         if (!match) throw new Error('Could not determine page count');
         return parseInt(match[1], 10);
-    } finally {
-        fs.unlink(tmpFile).catch(() => {});
+    } catch (error) {
+        throw new Error(`Could not determine page count: ${error.message}`);
     }
 }
 
@@ -144,30 +158,33 @@ function findChromeExecutable() {
 }
 
 // Function to convert HTML content to PDF using headless Chromium
+// It uses temporary files for input and output to avoid command line length limits
+// Pdf conversion is done by launching chromium with appropriate flags
+// Returns a Buffer containing the generated PDF
 async function convertHtmlToPdf(html, chromeExecutable) {
     const uniqueId = crypto.randomUUID();
     const tempDir = os.tmpdir();
     const inputHtmlPath = path.join(tempDir, `${uniqueId}.html`);
     const outputPdfPath = path.join(tempDir, `${uniqueId}.pdf`);
 
-    await fs.writeFile(inputHtmlPath, html, 'utf-8');
-
-    const args = [
-        '--headless=new',
-        '--no-sandbox',
-        '--disable-gpu',
-        '--disable-dev-shm-usage',
-        '--disable-extensions',
-        '--disable-plugins',
-        '--disable-background-networking',
-        '--disable-default-apps',
-        '--disable-sync',
-        '--no-pdf-header-footer',
-        `--print-to-pdf=${outputPdfPath}`,
-        inputHtmlPath
-    ];
-
     try {
+        // Write HTML to temp file
+        await fs.writeFile(inputHtmlPath, html, 'utf-8');
+
+        const args = [
+            '--headless=new',
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-background-networking',
+            '--disable-default-apps',
+            '--disable-sync',
+            '--no-pdf-header-footer',
+            `--print-to-pdf=${outputPdfPath}`,
+            inputHtmlPath
+        ];
 
         await new Promise((resolve, reject) => {
             execFile(chromeExecutable, args, (error, stdout, stderr) => {
@@ -177,11 +194,12 @@ async function convertHtmlToPdf(html, chromeExecutable) {
                 resolve(stdout);
             });
         });
+
+        // Read and return PDF buffer
         const pdfBuffer = await fs.readFile(outputPdfPath);
         return pdfBuffer;
 
     } finally {
-
         // Clean up temp files regardless of success/failure
         await Promise.allSettled([
             fs.unlink(inputHtmlPath),
