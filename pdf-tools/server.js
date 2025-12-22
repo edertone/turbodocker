@@ -11,72 +11,73 @@ const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 
 // Create a basic HTTP server to handle requests
 const server = http.createServer(async (req, res) => {
-
-    // Handle PDF page count endpoint
-    if (req.url === ENDPOINT_PDF_COUNT_PAGES) {
-        if (req.method !== 'POST') {
-            res.writeHead(405, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Method Not Allowed. Use POST with PDF data.' }));
-        }
-
-        try {
-            const { type, data: pdfBuffer } = await getPostData(req);
-
-            if (type !== 'file' || !pdfBuffer.length) {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: "Missing 'pdf' file in form data." }));
+    switch (req.url) {
+        case ENDPOINT_PDF_COUNT_PAGES:
+            if (req.method !== 'POST') {
+                res.writeHead(405, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Method Not Allowed. Use POST with PDF data.' }));
             }
 
-            const pageCount = await countPdfPagesWithPdfinfo(pdfBuffer);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ pages: pageCount }));
+            try {
+                const { type, data: pdfBuffer } = await getPostData(req);
 
-        } catch (error) {
-            console.error('Error processing pdf count request:', error);
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: error.message || 'Failed to count PDF pages.' }));
-        }
-    }
+                if (type !== 'file' || !pdfBuffer.length) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: "Missing 'pdf' file in form data." }));
+                }
 
-    // Throw error for non expected routes
-    if (![ENDPOINT_HTML_TO_PDF_BASE64, ENDPOINT_HTML_TO_PDF_BINARY].includes(req.url)) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: 'Invalid endpoint: ' + req.url }));
-    }
-    // Throw error for non-POST requests
-    if (req.method !== 'POST') {
-        res.writeHead(405, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: 'Method Not Allowed. Use valid html string via POST html variable' }));
-    }
+                const pageCount = await countPdfPagesWithPdfinfo(pdfBuffer);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ pages: pageCount }));
 
-    try {
-        const { type, data: parsedBody } = await getPostData(req);
+            } catch (error) {
+                console.error('Error processing pdf count request:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: error.message || 'Failed to count PDF pages.' }));
+            }
 
-        if (type !== 'json') {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Expected a JSON payload.' }));
-        }
-        
-        // Obtain the HTML content from the request body html key
-        const { html } = parsedBody;
-        if (!html) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: "Missing 'html' key in JSON payload." }));
-        }
-        
-        const pdfBuffer = await convertHtmlToPdf(html, CHROME_EXECUTABLE);
+        case ENDPOINT_HTML_TO_PDF_BINARY:
+        case ENDPOINT_HTML_TO_PDF_BASE64:
+            if (req.method !== 'POST') {
+                res.writeHead(405, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: 'Method Not Allowed. Use valid html string via POST html variable' }));
+            }
 
-        if (req.url === ENDPOINT_HTML_TO_PDF_BASE64) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(pdfBuffer.toString('base64'));
-        } else {
-            res.writeHead(200, { 'Content-Type': 'application/pdf' });
-            res.end(pdfBuffer);
-        }
-        
-    } catch (error) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message || 'Failed to convert HTML to PDF.' }));
+            try {
+                const { type, data: parsedBody } = await getPostData(req);
+
+                if (type !== 'json') {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: 'Expected a JSON payload.' }));
+                }
+
+                // Obtain the HTML content from the request body html key
+                const { html } = parsedBody;
+                if (!html) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: "Missing 'html' key in JSON payload." }));
+                }
+
+                const pdfBuffer = await convertHtmlToPdf(html, CHROME_EXECUTABLE);
+
+                if (req.url === ENDPOINT_HTML_TO_PDF_BASE64) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(pdfBuffer.toString('base64'));
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'application/pdf' });
+                    res.end(pdfBuffer);
+                }
+
+            } catch (error) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: error.message || 'Failed to convert HTML to PDF.' }));
+            }
+            break;
+
+        default:
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid endpoint: ' + req.url }));
+            break;
     }
 });
 
