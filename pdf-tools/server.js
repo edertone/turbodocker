@@ -1,5 +1,10 @@
 const http = require('node:http');
-const { findChromeExecutable, countPdfPagesWithPdfinfo, convertHtmlToPdf, getPostData } = require('./server-helper.js');
+const { 
+    findChromeExecutable,
+    countPdfPagesWithPdfinfo,
+    convertHtmlToPdf,
+    getPostVariables
+} = require('./server-helper.js');
 
 
 // Global constants
@@ -19,13 +24,14 @@ const server = http.createServer(async (req, res) => {
             }
 
             try {
-                const { type, data: pdfBuffer } = await getPostData(req);
+                const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
 
-                if (type !== 'file' || !pdfBuffer.length) {
+                if (!pdfData) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     return res.end(JSON.stringify({ error: "Missing 'pdf' file in form data." }));
                 }
 
+                const pdfBuffer = Buffer.from(pdfData, 'binary');
                 const pageCount = await countPdfPagesWithPdfinfo(pdfBuffer);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ pages: pageCount }));

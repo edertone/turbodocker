@@ -4,70 +4,62 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
-// Function to extract post data from a request
-// Supports JSON and multipart/form-data (for file uploads)
-// Returns an object with type and data
-async function getPostData(req) {
+// Function to get specific variables from a POST request
+// Supports JSON, urlencoded, and multipart/form-data
+// Returns an object with the requested variable names and their values
+async function getPostVariables(req, variableNames = []) {
     const bodyChunks = [];
     for await (const chunk of req) {
         bodyChunks.push(chunk);
     }
     const body = Buffer.concat(bodyChunks);
-
     const contentType = req.headers['content-type'] || '';
+    const result = {};
 
     if (contentType.includes('application/json')) {
         try {
-            return {
-                type: 'json',
-                data: JSON.parse(body.toString())
-            };
+            const data = JSON.parse(body.toString());
+            for (const name of variableNames) {
+                if (data[name] !== undefined) {
+                    result[name] = data[name];
+                }
+            }
         } catch (error) {
             throw new Error('Invalid JSON payload.');
         }
-    }
-
-    if (contentType.includes('multipart/form-data')) {
-        const boundary = `--${contentType.split('boundary=')[1]}`;
-        if (!boundary) {
+    } else if (contentType.includes('application/x-www-form-urlencoded')) {
+        const params = new URLSearchParams(body.toString());
+        for (const name of variableNames) {
+            if (params.has(name)) {
+                result[name] = params.get(name);
+            }
+        }
+    } else if (contentType.includes('multipart/form-data')) {
+        const boundaryMatch = contentType.match(/boundary=(.+)/);
+        if (!boundaryMatch) {
             throw new Error('Invalid multipart/form-data: boundary not found.');
         }
+        const boundary = `--${boundaryMatch[1]}`;
+        const parts = body.toString('binary').split(boundary);
 
-        const boundaryBuffer = Buffer.from(boundary);
-        const headerSeparator = Buffer.from('\r\n\r\n');
+        for (const part of parts) {
+            if (part.trim() === '' || part.trim() === '--') continue;
 
-        let partStartIndex = body.indexOf(boundaryBuffer);
-        if (partStartIndex === -1) {
-            throw new Error("Invalid multipart/form-data: boundary not found in body.");
+            const headerEndIndex = part.indexOf('\r\n\r\n');
+            if (headerEndIndex === -1) continue;
+
+            const headers = part.substring(0, headerEndIndex);
+            const contentDispositionMatch = headers.match(/Content-Disposition: form-data; name="([^"]+)"/);
+
+            if (contentDispositionMatch && variableNames.includes(contentDispositionMatch[1])) {
+                const name = contentDispositionMatch[1];
+                const value = part.substring(headerEndIndex + 4, part.length - 2); // -2 for \r\n
+                result[name] = value;
+            }
         }
-        partStartIndex += boundaryBuffer.length;
-
-        const headerEndIndex = body.indexOf(headerSeparator, partStartIndex);
-        if (headerEndIndex === -1) {
-            throw new Error("Invalid multipart/form-data: part headers not found.");
-        }
-        const fileDataStartIndex = headerEndIndex + headerSeparator.length;
-
-        const fileDataEndIndex = body.indexOf(boundaryBuffer, fileDataStartIndex);
-        if (fileDataEndIndex === -1) {
-            throw new Error("Invalid multipart/form-data: closing boundary not found.");
-        }
-
-        const fileBuffer = body.subarray(fileDataStartIndex, fileDataEndIndex - 2); // -2 for \r\n
-        if (!fileBuffer.length) {
-            throw new Error("Missing file in form data.");
-        }
-
-        return {
-            type: 'file',
-            data: fileBuffer
-        };
     }
 
-    return {
-        type: 'raw',
-        data: body
-    };
+    return result;
 }
 
 // Count PDF pages using pdfinfo
@@ -157,5 +149,5 @@ module.exports = {
     findChromeExecutable,
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
-    getPostData,
+    getPostVariables,
 };
