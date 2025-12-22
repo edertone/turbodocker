@@ -34,25 +34,27 @@ To generate a pdf, send a POST request with a JSON payload containing the HTML s
 
 The service will directly return the PDF data encoded to the selected format.
 
-**Usage example with php:**
+**Example: Convert HTML to PDF (base64) using PHP**
 
 ```
 // Call to the HTML to PDF conversion microservice
-$ch = curl_init('http://html-pdf-converter:5001/convert-to-base64');
+$html = '<html><body><h1>Hello, PDF!</h1><p>This is a test.</p></body></html>';
+
+$ch = curl_init('http://html-pdf-converter:5001/html-to-pdf-base64');
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['html' => $report]));
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['html' => $html]));
 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 
-$pdf = curl_exec($ch);
+$pdfBase64 = curl_exec($ch);
 
-if ($pdf === false) {
+if ($pdfBase64 === false) {
     $errorMsg = curl_error($ch);
-    curl_close($ch);
-    return $errorMsg;
+    // Process the error as necessary
 }
 
 curl_close($ch);
 
-return $pdf;
+// $pdfBase64 now contains the base64-encoded PDF string
+return $pdfBase64;
 ```
