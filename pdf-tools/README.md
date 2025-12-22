@@ -4,6 +4,12 @@ This is a Dockerized microservice utility with general purpose PDF manipulation 
 
 It exposes several HTTP (no https) API endpoints at the 5001 port
 
+## Build and run locally (for testing and development):
+
+```
+docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
+```
+
 ## PDF pages count
 
 TODO

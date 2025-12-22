@@ -7,6 +7,8 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont \
     nodejs \
+    ghostscript \
+    poppler-utils \
     && adduser -D converter
 
 # Set working directory
