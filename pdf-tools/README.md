@@ -79,11 +79,8 @@ Send a POST request with multipart/form-data:
 
 - `pdf`: The PDF file data
 - `page`: Page number (0-based, so 0 = first page)
-
-**Optional parameters**:
-
-- `jpgQuality`: JPEG quality 1-100 (default: 90)
-- `dpi`: Resolution 72-2400 (default: 150)
+- `jpgQuality`: JPEG quality 1-100
+- `dpi`: Resolution 72-2400
 
 Returns the JPEG image as binary data with `Content-Type: image/jpeg`.
 

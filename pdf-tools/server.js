@@ -53,16 +53,14 @@ const server = http.createServer(async (req, res) => {
             break;
 
         case ENDPOINT_PDF_GET_PAGE_AS_JPG:
-            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data, page number, and optional quality/dpi parameters.')) return;
+            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data, page number, jpgQuality, and dpi parameters.')) return;
             
             try {
-                const postData = await getPostVariables(req, ['pdf', 'page']);
+                const postData = await getPostVariables(req, ['pdf', 'page', 'jpgQuality', 'dpi']);
                 const pdfBuffer = Buffer.from(postData.pdf, 'binary');
                 const page = parseInt(postData.page, 10);
-                
-                // Optional parameters with defaults
-                const jpgQuality = postData.jpgQuality ? parseInt(postData.jpgQuality, 10) : 90;
-                const dpi = postData.dpi ? parseInt(postData.dpi, 10) : 150;
+                const jpgQuality = parseInt(postData.jpgQuality, 10);
+                const dpi = parseInt(postData.dpi, 10);
                 
                 const imageBuffer = await getPdfPageAsJpg(pdfBuffer, page, jpgQuality, dpi);
                 
