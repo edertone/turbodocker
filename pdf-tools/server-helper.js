@@ -4,6 +4,16 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
+// Function to reject non-POST requests
+function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
+    if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: message }));
+        return true;
+    }
+    return false;
+}
+
 // Function to get specific variables from a POST request
 // Supports JSON, urlencoded, and multipart/form-data
 // Returns an object with the requested variable names and their values
@@ -56,6 +66,12 @@ async function getPostVariables(req, variableNames = []) {
                 const value = part.substring(headerEndIndex + 4, part.length - 2); // -2 for \r\n
                 result[name] = value;
             }
+        }
+    }
+
+    for (const field of variableNames) {
+        if (!result[field]) {
+            throw new Error(`Missing POST variable '${field}'`);
         }
     }
 
@@ -146,6 +162,7 @@ async function convertHtmlToPdf(html, chromeExecutable) {
 }
 
 module.exports = {
+    rejectNonPost,
     findChromeExecutable,
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,

@@ -1,5 +1,6 @@
 const http = require('node:http');
-const { 
+const {
+    rejectNonPost,
     findChromeExecutable,
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
@@ -18,45 +19,27 @@ const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 const server = http.createServer(async (req, res) => {
     switch (req.url) {
         case ENDPOINT_PDF_COUNT_PAGES:
-            if (req.method !== 'POST') {
-                res.writeHead(405, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: 'Method Not Allowed. Use POST with PDF data.' }));
-            }
-
+            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data.')) return;
+            
             try {
                 const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
-
-                if (!pdfData) {
-                    res.writeHead(400, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: "Missing 'pdf' file in form data." }));
-                }
-
                 const pdfBuffer = Buffer.from(pdfData, 'binary');
                 const pageCount = await countPdfPagesWithPdfinfo(pdfBuffer);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ pages: pageCount }));
 
             } catch (error) {
-                console.error('Error processing pdf count request:', error);
-                res.writeHead(500, { 'Content-Type': 'application/json' });
+                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
+                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ error: error.message || 'Failed to count PDF pages.' }));
             }
 
         case ENDPOINT_HTML_TO_PDF_BINARY:
         case ENDPOINT_HTML_TO_PDF_BASE64:
-            if (req.method !== 'POST') {
-                res.writeHead(405, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: 'Method Not Allowed. Use valid html string via POST html variable' }));
-            }
-
+            if (rejectNonPost(req, res, 'Method Not Allowed. Use valid html string via POST html variable')) return;
+            
             try {
                 const { html } = await getPostVariables(req, ['html']);
-
-                if (!html) {
-                    res.writeHead(400, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: "Missing 'html' file in form data." }));
-                }
-
                 const pdfBuffer = await convertHtmlToPdf(html, CHROME_EXECUTABLE);
 
                 if (req.url === ENDPOINT_HTML_TO_PDF_BASE64) {
@@ -68,8 +51,9 @@ const server = http.createServer(async (req, res) => {
                 }
 
             } catch (error) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: error.message || 'Failed to convert HTML to PDF.' }));
+                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
+                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: error.message || 'Failed to convert HTML to PDF.' }));
             }
             break;
 
