@@ -1,13 +1,17 @@
 # HTML to PDF web service
 
-This is a Dockerized utility for converting HTML to PDF using Chromium through an http web service
+This is a Dockerized utility for converting HTML to PDF using Chromium through an http web service.
+
+It expects html raw data and returns the equivalent pdf rendered using the chromium engine. All the conversion process and temporary data is handled internally by the docker image, so the only requirement is to have HDD space for the docker container.
+
+All temporary files used by this container are automatically cleaned, so no increase in storage should happen during extended usage of this microservice.
 
 ## Endpoints:
 
 The service exposes two HTTP endpoints at the 5001 port:
 
-    •  /convert-to-base64: Returns the PDF as a base64 string
     •  /convert-to-binary: Returns the PDF as binary file (Recommended for performance)
+    •  /convert-to-base64: Returns the PDF as a base64 string
 
 To generate a pdf, send a POST request with a JSON payload containing the HTML string:
 
@@ -17,9 +21,11 @@ To generate a pdf, send a POST request with a JSON payload containing the HTML s
 }
 ```
 
-The service will return the pdf data with the appropiate format.
+The service will directly return the PDF data with the selected format.
 
-Example with php:
+## Examples
+
+### With php:
 
 ```
 // Call to the HTML to PDF conversion microservice
