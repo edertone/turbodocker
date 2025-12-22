@@ -4,6 +4,14 @@ const { promises: fs } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
+
+// Global constants
+const PORT = 5001;
+const CHROME_EXECUTABLE = findChromeExecutable();
+const ENDPOINT_HTML_TO_PDF_BINARY = '/html-to-pdf-binary';
+const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
+
+
 // Function to find the chromium executable that is available on the system
 function findChromeExecutable() {
     const candidates = [
@@ -24,9 +32,6 @@ function findChromeExecutable() {
     
     throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
 }
-
-const PORT = 5001;
-const CHROME_EXECUTABLE = findChromeExecutable();
 
 // Function to convert HTML content to PDF using headless Chromium
 async function convertHtmlToPdf(html) {
@@ -77,13 +82,11 @@ async function convertHtmlToPdf(html) {
 
 // Create a basic HTTP server to handle HTML to PDF conversion requests
 const server = http.createServer(async (req, res) => {
-    
     // Throw error for non expected routes
-    if (!['/convert-to-base64', '/convert-to-binary'].includes(req.url)) {
+    if (![ENDPOINT_HTML_TO_PDF_BASE64, ENDPOINT_HTML_TO_PDF_BINARY].includes(req.url)) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Invalid endpoint: ' + req.url }));
     }
-    
     // Throw error for non-POST requests
     if (req.method !== 'POST') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
@@ -116,7 +119,7 @@ const server = http.createServer(async (req, res) => {
         
         const pdfBuffer = await convertHtmlToPdf(html);
 
-        if (req.url === '/convert-to-base64') {
+        if (req.url === ENDPOINT_HTML_TO_PDF_BASE64) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(pdfBuffer.toString('base64'));
         } else {
