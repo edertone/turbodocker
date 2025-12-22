@@ -50,18 +50,11 @@ const server = http.createServer(async (req, res) => {
             }
 
             try {
-                const { type, data: parsedBody } = await getPostData(req);
+                const { html } = await getPostVariables(req, ['html']);
 
-                if (type !== 'json') {
-                    res.writeHead(400, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: 'Expected a JSON payload.' }));
-                }
-
-                // Obtain the HTML content from the request body html key
-                const { html } = parsedBody;
                 if (!html) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: "Missing 'html' key in JSON payload." }));
+                    return res.end(JSON.stringify({ error: "Missing 'html' file in form data." }));
                 }
 
                 const pdfBuffer = await convertHtmlToPdf(html, CHROME_EXECUTABLE);
