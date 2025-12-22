@@ -1,5 +1,5 @@
 const http = require('node:http');
-const { findChromeExecutable, countPdfPagesWithPdfinfo, convertHtmlToPdf } = require('./server-helper.js');
+const { findChromeExecutable, countPdfPagesWithPdfinfo, convertHtmlToPdf, getPostData } = require('./server-helper.js');
 
 
 // Global constants
@@ -20,51 +20,9 @@ const server = http.createServer(async (req, res) => {
         }
 
         try {
-            const contentType = req.headers['content-type'];
-            if (!contentType || !contentType.startsWith('multipart/form-data')) {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: 'Content-Type must be multipart/form-data.' }));
-            }
+            const { type, data: pdfBuffer } = await getPostData(req);
 
-            const boundary = `--${contentType.split('boundary=')[1]}`;
-            if (!boundary) {
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: 'Invalid multipart/form-data: boundary not found.' }));
-            }
-
-            const bodyChunks = [];
-            for await (const chunk of req) {
-                bodyChunks.push(chunk);
-            }
-            const body = Buffer.concat(bodyChunks);
-
-            const boundaryBuffer = Buffer.from(boundary);
-            const headerSeparator = Buffer.from('\r\n\r\n');
-
-            let partStartIndex = body.indexOf(boundaryBuffer);
-            if (partStartIndex === -1) {
-                throw new Error("Invalid multipart/form-data: boundary not found in body.");
-            }
-            partStartIndex += boundaryBuffer.length;
-
-            // Find the start of the file data (after the part headers)
-            const headerEndIndex = body.indexOf(headerSeparator, partStartIndex);
-            if (headerEndIndex === -1) {
-                throw new Error("Invalid multipart/form-data: part headers not found.");
-            }
-            const fileDataStartIndex = headerEndIndex + headerSeparator.length;
-
-            // Find the end of the file data (before the next boundary)
-            const fileDataEndIndex = body.indexOf(boundaryBuffer, fileDataStartIndex);
-            if (fileDataEndIndex === -1) {
-                throw new Error("Invalid multipart/form-data: closing boundary not found.");
-            }
-
-            // The actual file data is between the end of headers and the start of the next boundary
-            // We need to trim the CRLF before the boundary
-            const pdfBuffer = body.subarray(fileDataStartIndex, fileDataEndIndex - 2); // -2 for \r\n
-
-            if (!pdfBuffer.length) {
+            if (type !== 'file' || !pdfBuffer.length) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ error: "Missing 'pdf' file in form data." }));
             }
@@ -91,29 +49,20 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'Method Not Allowed. Use valid html string via POST html variable' }));
     }
 
-    // Collect the request body
-    const bodyChunks = [];
-    for await (const chunk of req) {
-        bodyChunks.push(chunk);
-    }
-    const body = Buffer.concat(bodyChunks).toString();
-
-    let parsedBody;
     try {
-        parsedBody = JSON.parse(body);
-    } catch {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: 'Invalid JSON payload.' }));
-    }
+        const { type, data: parsedBody } = await getPostData(req);
 
-    // Obtain the HTML content from the request body html key
-    const { html } = parsedBody;
-    if (!html) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ error: "Missing 'html' key in JSON payload." }));
-    }
-
-    try {
+        if (type !== 'json') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Expected a JSON payload.' }));
+        }
+        
+        // Obtain the HTML content from the request body html key
+        const { html } = parsedBody;
+        if (!html) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: "Missing 'html' key in JSON payload." }));
+        }
         
         const pdfBuffer = await convertHtmlToPdf(html, CHROME_EXECUTABLE);
 

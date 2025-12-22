@@ -4,6 +4,72 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
+// Function to extract post data from a request
+// Supports JSON and multipart/form-data (for file uploads)
+// Returns an object with type and data
+async function getPostData(req) {
+    const bodyChunks = [];
+    for await (const chunk of req) {
+        bodyChunks.push(chunk);
+    }
+    const body = Buffer.concat(bodyChunks);
+
+    const contentType = req.headers['content-type'] || '';
+
+    if (contentType.includes('application/json')) {
+        try {
+            return {
+                type: 'json',
+                data: JSON.parse(body.toString())
+            };
+        } catch (error) {
+            throw new Error('Invalid JSON payload.');
+        }
+    }
+
+    if (contentType.includes('multipart/form-data')) {
+        const boundary = `--${contentType.split('boundary=')[1]}`;
+        if (!boundary) {
+            throw new Error('Invalid multipart/form-data: boundary not found.');
+        }
+
+        const boundaryBuffer = Buffer.from(boundary);
+        const headerSeparator = Buffer.from('\r\n\r\n');
+
+        let partStartIndex = body.indexOf(boundaryBuffer);
+        if (partStartIndex === -1) {
+            throw new Error("Invalid multipart/form-data: boundary not found in body.");
+        }
+        partStartIndex += boundaryBuffer.length;
+
+        const headerEndIndex = body.indexOf(headerSeparator, partStartIndex);
+        if (headerEndIndex === -1) {
+            throw new Error("Invalid multipart/form-data: part headers not found.");
+        }
+        const fileDataStartIndex = headerEndIndex + headerSeparator.length;
+
+        const fileDataEndIndex = body.indexOf(boundaryBuffer, fileDataStartIndex);
+        if (fileDataEndIndex === -1) {
+            throw new Error("Invalid multipart/form-data: closing boundary not found.");
+        }
+
+        const fileBuffer = body.subarray(fileDataStartIndex, fileDataEndIndex - 2); // -2 for \r\n
+        if (!fileBuffer.length) {
+            throw new Error("Missing file in form data.");
+        }
+
+        return {
+            type: 'file',
+            data: fileBuffer
+        };
+    }
+
+    return {
+        type: 'raw',
+        data: body
+    };
+}
+
 // Count PDF pages using pdfinfo
 async function countPdfPagesWithPdfinfo(pdfBuffer) {
     const tmpDir = os.tmpdir();
@@ -91,4 +157,5 @@ module.exports = {
     findChromeExecutable,
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
+    getPostData,
 };
