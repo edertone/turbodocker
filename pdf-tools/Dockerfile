@@ -15,7 +15,7 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy application code
-COPY --chown=converter:converter server.js .
+COPY --chown=converter:converter *.js .
 
 # Switch to non-root user
 USER converter
