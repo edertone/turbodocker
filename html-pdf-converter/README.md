@@ -1,10 +1,10 @@
 # HTML to PDF web service
 
-This is a Dockerized utility for converting HTML to PDF using Chromium through an http web service.
+This is a Dockerized microservice utility for converting HTML to PDF using Chromium. It generates PDF files that are rendered exactly the same as how the browser renders the HTML source.
 
-It expects html raw data and returns the equivalent pdf rendered using the chromium engine. All the conversion process and temporary data is handled internally by the docker image, so the only requirement is to have HDD space for the docker container.
+The container works as a web service that expects html raw data and returns the equivalent pdf rendered using the chromium engine. All the conversion process and temporary data is handled internally by the docker image, so the only requirement is to have enough HDD space for the docker container to run.
 
-All temporary files used by this container are automatically cleaned, so no increase in storage should happen during extended usage of this microservice.
+All temporary files are automatically cleaned, so no increase in storage should happen during extended usage of this microservice.
 
 ## Endpoints:
 
