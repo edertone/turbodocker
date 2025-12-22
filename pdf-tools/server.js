@@ -5,15 +5,16 @@ const {
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
     getPostVariables,
-    isValidPdf
+    isValidPdf,
+    getPdfPageAsJpg
 } = require('./server-helper.js');
 
 
 // Global constants
 const PORT = 5001;
-const CHROME_EXECUTABLE = findChromeExecutable();
 const ENDPOINT_PDF_IS_VALID = '/pdf-is-valid';
 const ENDPOINT_PDF_COUNT_PAGES = '/pdf-count-pages';
+const ENDPOINT_PDF_GET_PAGE_AS_JPG = '/pdf-get-page-as-jpg';
 const ENDPOINT_HTML_TO_PDF_BINARY = '/html-to-pdf-binary';
 const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 
@@ -49,6 +50,31 @@ const server = http.createServer(async (req, res) => {
                 res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ error: error.message || 'Failed to count PDF pages.' }));
             }
+            break;
+
+        case ENDPOINT_PDF_GET_PAGE_AS_JPG:
+            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data, page number, and optional quality/dpi parameters.')) return;
+            
+            try {
+                const postData = await getPostVariables(req, ['pdf', 'page']);
+                const pdfBuffer = Buffer.from(postData.pdf, 'binary');
+                const page = parseInt(postData.page, 10);
+                
+                // Optional parameters with defaults
+                const jpgQuality = postData.jpgQuality ? parseInt(postData.jpgQuality, 10) : 90;
+                const dpi = postData.dpi ? parseInt(postData.dpi, 10) : 150;
+                
+                const imageBuffer = await getPdfPageAsJpg(pdfBuffer, page, jpgQuality, dpi);
+                
+                res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+                return res.end(imageBuffer);
+                
+            } catch (error) {
+                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
+                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: error.message || 'Failed to convert PDF page to JPEG.' }));
+            }
+            break;
 
         case ENDPOINT_HTML_TO_PDF_BINARY:
         case ENDPOINT_HTML_TO_PDF_BASE64:
@@ -56,7 +82,7 @@ const server = http.createServer(async (req, res) => {
             
             try {
                 const { html } = await getPostVariables(req, ['html']);
-                const pdfBuffer = await convertHtmlToPdf(html, CHROME_EXECUTABLE);
+                const pdfBuffer = await convertHtmlToPdf(html);
 
                 if (req.url === ENDPOINT_HTML_TO_PDF_BASE64) {
                     res.writeHead(200, { 'Content-Type': 'application/json' });

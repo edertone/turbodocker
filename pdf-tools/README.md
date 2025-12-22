@@ -10,13 +10,100 @@ It exposes several HTTP (no https) API endpoints at the 5001 port
 docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
 ```
 
+## PDF Validation
+
+Validate if a file is a valid PDF document.
+
+**Endpoint**: `/pdf-is-valid`
+
+Send a POST request with multipart/form-data containing the PDF file:
+
+- `pdf`: The PDF file data
+
+Returns JSON response:
+
+```json
+{
+  "valid": true
+}
+```
+
+**Example using Node.js**:
+
+```javascript
+const formData = new FormData();
+formData.append("pdf", pdfBuffer);
+
+const response = await fetch("http://localhost:5001/pdf-is-valid", {
+  method: "POST",
+  body: formData,
+});
+
+const result = await response.json();
+console.log("Is valid PDF:", result.valid);
+```
+
 ## PDF pages count
 
-TODO
+Get the number of pages in a PDF document.
+
+**Endpoint**: `/pdf-count-pages`
+
+Send a POST request with multipart/form-data containing the PDF file:
+
+- `pdf`: The PDF file data
+
+Returns JSON response:
+
+```json
+{
+  "pages": 5
+}
+```
+
+**Example using cURL**:
+
+```bash
+curl -X POST -F "pdf=@document.pdf" http://localhost:5001/pdf-count-pages
+```
 
 ## PDF to images
 
-TODO
+Convert a specific PDF page to a JPEG image with customizable quality and resolution.
+
+**Endpoint**: `/pdf-get-page-as-jpg`
+
+Send a POST request with multipart/form-data:
+
+**Required parameters**:
+
+- `pdf`: The PDF file data
+- `page`: Page number (0-based, so 0 = first page)
+
+**Optional parameters**:
+
+- `jpgQuality`: JPEG quality 1-100 (default: 90)
+- `dpi`: Resolution 72-2400 (default: 150)
+
+Returns the JPEG image as binary data with `Content-Type: image/jpeg`.
+
+**Example using Node.js**:
+
+```javascript
+const formData = new FormData();
+formData.append("pdf", pdfBuffer);
+formData.append("page", "0"); // First page
+formData.append("jpgQuality", "95");
+formData.append("dpi", "300");
+
+const response = await fetch("http://localhost:5001/pdf-get-page-as-jpg", {
+  method: "POST",
+  body: formData,
+});
+
+const imageBuffer = await response.arrayBuffer();
+// Save or process the JPEG image
+```
 
 ## HTML to PDF
 

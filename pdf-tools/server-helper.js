@@ -4,6 +4,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
+// Global variables to cache executable paths
+let _ghostscriptExecutable = null;
+let _chromeExecutable = null;
+
 // Function to reject non-POST requests
 function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
     if (req.method !== 'POST') {
@@ -138,6 +142,11 @@ async function countPdfPagesWithPdfinfo(pdfBuffer) {
 
 // Function to find the chromium executable that is available on the system
 function findChromeExecutable() {
+    // Return cached result if available
+    if (_chromeExecutable !== null) {
+        return _chromeExecutable;
+    }
+
     const candidates = [
         'chromium',
         'chromium-browser',
@@ -148,6 +157,7 @@ function findChromeExecutable() {
     for (const candidate of candidates) {
         try {
             execSync(`command -v ${candidate}`);
+            _chromeExecutable = candidate;
             return candidate;
         } catch {
             continue;
@@ -157,11 +167,110 @@ function findChromeExecutable() {
     throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
 }
 
+// Function to find the ghostscript executable that is available on the system
+function findGhostscriptExecutable() {
+    // Return cached result if available
+    if (_ghostscriptExecutable !== null) {
+        return _ghostscriptExecutable;
+    }
+
+    const candidates = [
+        'gs',
+        'ghostscript',
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            execSync(`command -v ${candidate}`, { stdio: 'ignore' });
+            _ghostscriptExecutable = candidate;
+            return candidate;
+        } catch {
+            continue;
+        }
+    }
+
+    throw new Error('Could not find a ghostscript executable. Please install ghostscript.');
+}
+
+// Convert a specific PDF page to JPEG using Ghostscript
+// Similar to PHP method: getPageAsJpg($pdfFilePath, $page, $jpgQuality = 90, $dpi = '150')
+async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
+    // Validate parameters
+    if (!Number.isInteger(page) || page < 0) {
+        throw new Error('Specified page must be a positive integer');
+    }
+    
+    if (!Number.isInteger(jpgQuality) || jpgQuality < 1 || jpgQuality > 100) {
+        throw new Error('JPEG quality must be an integer between 1 and 100');
+    }
+    
+    if (!Number.isInteger(dpi) || dpi < 72 || dpi > 2400) {
+        throw new Error('DPI must be an integer between 72 and 2400');
+    }
+
+    // Check for PDF header
+    if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
+        throw new Error('Invalid PDF buffer provided');
+    }
+
+    const gsExecutable = findGhostscriptExecutable();
+    
+    // Build ghostscript arguments (equivalent to the PHP command)
+    const args = [
+        '-dNOPAUSE',
+        '-sDEVICE=jpeg',
+        '-dUseCIEColor',
+        '-dDOINTERPOLATE',
+        '-dTextAlphaBits=4',
+        '-dGraphicsAlphaBits=4',
+        '-sOutputFile=-',  // Output to stdout
+        `-dFirstPage=${page + 1}`,  // Convert 0-based to 1-based page numbering
+        `-dLastPage=${page + 1}`,
+        `-r${dpi}`,
+        `-dJPEGQ=${jpgQuality}`,
+        '-q',  // Quiet mode
+        '-'    // Read from stdin
+    ];
+
+    try {
+        const imageBuffer = await new Promise((resolve, reject) => {
+            const child = execFile(gsExecutable, args, { 
+                encoding: null,  // Get binary output
+                maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large images
+            }, (error, stdout, stderr) => {
+                if (error) {
+                    return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
+                }
+                
+                // Check if output is too small (likely an error)
+                if (stdout.length < 500) {
+                    const errorMsg = stdout.toString();
+                    if (errorMsg.includes('No pages will be processed')) {
+                        return reject(new Error(`Page ${page} does not exist in the PDF`));
+                    }
+                    return reject(new Error(`Ghostscript failed: ${errorMsg}`));
+                }
+                
+                resolve(stdout);
+            });
+            
+            // Write PDF buffer to stdin and close it
+            child.stdin.write(pdfBuffer);
+            child.stdin.end();
+        });
+        
+        return imageBuffer;
+    } catch (error) {
+        throw new Error(`Could not convert PDF page to JPEG: ${error.message}`);
+    }
+}
+
 // Function to convert HTML content to PDF using headless Chromium
 // It uses temporary files for input and output to avoid command line length limits
 // Pdf conversion is done by launching chromium with appropriate flags
 // Returns a Buffer containing the generated PDF
-async function convertHtmlToPdf(html, chromeExecutable) {
+async function convertHtmlToPdf(html) {
+    const chromeExecutable = findChromeExecutable();
     const uniqueId = crypto.randomUUID();
     const tempDir = os.tmpdir();
     const inputHtmlPath = path.join(tempDir, `${uniqueId}.html`);
@@ -210,9 +319,9 @@ async function convertHtmlToPdf(html, chromeExecutable) {
 
 module.exports = {
     rejectNonPost,
-    findChromeExecutable,
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
     getPostVariables,
     isValidPdf,
+    getPdfPageAsJpg
 };
