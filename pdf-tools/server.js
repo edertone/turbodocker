@@ -4,13 +4,15 @@ const {
     findChromeExecutable,
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
-    getPostVariables
+    getPostVariables,
+    isValidPdf
 } = require('./server-helper.js');
 
 
 // Global constants
 const PORT = 5001;
 const CHROME_EXECUTABLE = findChromeExecutable();
+const ENDPOINT_PDF_IS_VALID = '/pdf-is-valid';
 const ENDPOINT_PDF_COUNT_PAGES = '/pdf-count-pages';
 const ENDPOINT_HTML_TO_PDF_BINARY = '/html-to-pdf-binary';
 const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
@@ -18,6 +20,20 @@ const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 // Create a basic HTTP server to handle requests
 const server = http.createServer(async (req, res) => {
     switch (req.url) {
+        case ENDPOINT_PDF_IS_VALID:
+            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data.')) return;
+            try {
+                const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
+                const pdfBuffer = Buffer.from(pdfData, 'binary');
+                const isValid = await isValidPdf(pdfBuffer);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ valid: isValid }));
+            } catch (error) {
+                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
+                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ error: error.message || 'Failed to validate PDF.' }));
+            }
+            break;
         case ENDPOINT_PDF_COUNT_PAGES:
             if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data.')) return;
             

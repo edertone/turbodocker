@@ -63,8 +63,15 @@ async function getPostVariables(req, variableNames = []) {
 
             if (contentDispositionMatch && variableNames.includes(contentDispositionMatch[1])) {
                 const name = contentDispositionMatch[1];
-                const value = part.substring(headerEndIndex + 4, part.length - 2); // -2 for \r\n
-                result[name] = value;
+                // Find start and end of content
+                const contentStart = headerEndIndex + 4;
+                let contentEnd = part.length;
+                // Remove trailing \r\n or -- if present
+                if (part.endsWith('\r\n')) contentEnd -= 2;
+                if (part.endsWith('--')) contentEnd -= 2;
+                // Extract as Buffer
+                const valueBuffer = Buffer.from(part.substring(contentStart, contentEnd), 'binary');
+                result[name] = valueBuffer;
             }
         }
     }
@@ -76,6 +83,28 @@ async function getPostVariables(req, variableNames = []) {
     }
 
     return result;
+}
+
+// Check if a Buffer is a valid PDF file
+async function isValidPdf(pdfBuffer) {
+    // Check for PDF header
+    if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
+        return false;
+    }
+    // Try to use pdfinfo to parse the file
+    const tmpDir = os.tmpdir();
+    const tmpFile = path.join(tmpDir, `pdfvalid_${crypto.randomUUID()}.pdf`);
+    try {
+        await fs.writeFile(tmpFile, pdfBuffer);
+        try {
+            execSync(`pdfinfo "${tmpFile}"`);
+            return true;
+        } catch {
+            return false;
+        }
+    } finally {
+        fs.unlink(tmpFile).catch(() => {});
+    }
 }
 
 // Count PDF pages using pdfinfo
@@ -167,4 +196,5 @@ module.exports = {
     countPdfPagesWithPdfinfo,
     convertHtmlToPdf,
     getPostVariables,
+    isValidPdf,
 };
