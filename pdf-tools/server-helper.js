@@ -8,7 +8,12 @@ const os = require('node:os');
 let _ghostscriptExecutable = null;
 let _chromeExecutable = null;
 
-// Function to find the chromium executable that is available on the system
+/**
+ * Finds the Chromium-based browser executable available on the system.
+ * Checks for common executable names and caches the result.
+ * @returns {string} The name of the Chromium executable found.
+ * @throws {Error} If no Chromium executable is found on the system.
+ */
 function findChromeExecutable() {
     // Return cached result if available
     if (_chromeExecutable !== null) {
@@ -30,7 +35,12 @@ function findChromeExecutable() {
     throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
 }
 
-// Function to find the ghostscript executable that is available on the system
+/**
+ * Finds the Ghostscript executable available on the system.
+ * Checks for common executable names and caches the result.
+ * @returns {string} The name of the Ghostscript executable found.
+ * @throws {Error} If no Ghostscript executable is found on the system.
+ */
 function findGhostscriptExecutable() {
     // Return cached result if available
     if (_ghostscriptExecutable !== null) {
@@ -52,7 +62,13 @@ function findGhostscriptExecutable() {
     throw new Error('Could not find a ghostscript executable. Please install ghostscript.');
 }
 
-// Function to reject non-POST requests
+/**
+ * Rejects HTTP requests that are not POST, sending a 405 response.
+ * @param {import('http').IncomingMessage} req - The HTTP request object.
+ * @param {import('http').ServerResponse} res - The HTTP response object.
+ * @param {string} [message='Method Not Allowed. Use POST.'] - Optional error message.
+ * @returns {boolean} True if the request was rejected, false otherwise.
+ */
 function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
     if (req.method !== 'POST') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
@@ -62,9 +78,15 @@ function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
     return false;
 }
 
-// Function to get specific variables from a POST request
-// Supports JSON, urlencoded, and multipart/form-data
-// Returns an object with the requested variable names and their values
+/**
+ * Extracts specific variables from a POST request body.
+ * Supports JSON, urlencoded, and multipart/form-data content types.
+ * @param {import('http').IncomingMessage} req - The HTTP request object.
+ * @param {string[]} [mandatoryVariableNames=[]] - List of required variable names.
+ * @param {string[]} [optionalVariableNames=[]] - List of optional variable names.
+ * @returns {Promise<Object>} An object with the requested variable names and their values (Buffer for file fields).
+ * @throws {Error} If a mandatory variable is missing or the payload is invalid.
+ */
 async function getPostVariables(req, mandatoryVariableNames = [], optionalVariableNames = []) {
     // Combine mandatory and optional fields to get all fields to extract
     const allVariableNames = [...mandatoryVariableNames, ...optionalVariableNames];
@@ -137,7 +159,11 @@ async function getPostVariables(req, mandatoryVariableNames = [], optionalVariab
     return result;
 }
 
-// Check if a Buffer is a valid PDF file
+/**
+ * Checks if a Buffer contains a valid PDF file by header and by running pdfinfo.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @returns {Promise<boolean>} True if the buffer is a valid PDF, false otherwise.
+ */
 async function isValidPdf(pdfBuffer) {
     // Check for PDF header
     if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
@@ -164,7 +190,12 @@ async function isValidPdf(pdfBuffer) {
     }
 }
 
-// Count PDF pages using pdfinfo
+/**
+ * Counts the number of pages in a PDF buffer using pdfinfo.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @returns {Promise<number>} The number of pages in the PDF.
+ * @throws {Error} If the page count cannot be determined.
+ */
 async function countPdfPages(pdfBuffer) {
     try {
         const output = await new Promise((resolve, reject) => {
@@ -188,8 +219,15 @@ async function countPdfPages(pdfBuffer) {
     }
 }
 
-// Convert a specific PDF page to JPEG using Ghostscript
-// Similar to PHP method: getPageAsJpg($pdfFilePath, $page, $jpgQuality = 90, $dpi = '150')
+/**
+ * Converts a specific page of a PDF buffer to a JPEG image using Ghostscript.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @param {number} page - The zero-based page index to convert.
+ * @param {number} [jpgQuality=90] - JPEG quality (1-100).
+ * @param {number} [dpi=150] - Dots per inch for rendering (72-2400).
+ * @returns {Promise<Buffer>} The JPEG image buffer of the specified page.
+ * @throws {Error} If conversion fails or parameters are invalid.
+ */
 async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
     // Validate parameters
     if (!Number.isInteger(page) || page < 0) {
@@ -266,8 +304,17 @@ async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
     }
 }
 
-// Convert the first page (cover) of a PDF to JPEG thumbnail with custom dimensions
-// Similar to getPdfPageAsJpg but specifically for thumbnails with width/height control
+/**
+ * Converts the first page (cover) of a PDF buffer to a JPEG thumbnail with custom dimensions.
+ * Calculates missing width/height proportionally if only one is provided.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @param {Object} options - Options for thumbnail generation.
+ * @param {number} [options.width] - Desired width in pixels.
+ * @param {number} [options.height] - Desired height in pixels.
+ * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
+ * @returns {Promise<Buffer>} The JPEG thumbnail buffer.
+ * @throws {Error} If conversion fails or parameters are invalid.
+ */
 async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
     const { width, height, jpegQuality = 90 } = options;
 
@@ -373,10 +420,13 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
     }
 }
 
-// Function to convert HTML content to PDF using headless Chromium
-// It uses temporary files for input and output to avoid command line length limits
-// Pdf conversion is done by launching chromium with appropriate flags
-// Returns a Buffer containing the generated PDF
+/**
+ * Converts HTML content to a PDF buffer using headless Chromium.
+ * Uses temporary files for input and output to avoid command line length limits.
+ * @param {string} html - The HTML content to convert.
+ * @returns {Promise<Buffer>} The generated PDF as a Buffer.
+ * @throws {Error} If PDF generation fails.
+ */
 async function convertHtmlToPdf(html) {
     const chromeExecutable = findChromeExecutable();
     const uniqueId = crypto.randomUUID();
