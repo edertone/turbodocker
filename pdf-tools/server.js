@@ -1,7 +1,6 @@
 const http = require('node:http');
 const {
     rejectNonPost,
-    findChromeExecutable,
     countPdfPages,
     convertHtmlToPdf,
     getPostVariables,
