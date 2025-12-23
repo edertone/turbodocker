@@ -1,8 +1,8 @@
-
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { randomBytes } = require('crypto');
+const assert = require('assert');
 
 const ENDPOINT = 'http://localhost:5001/pdf-count-pages';
 
@@ -12,10 +12,9 @@ const TEST_CASES = [
     { file: 'sample30.pdf', expected: 30 },
 ];
 
-async function countPagesForFile(pdfPath, expectedPages) {
+function countPagesForFile(pdfPath, expectedPages) {
     return new Promise((resolve) => {
         if (!fs.existsSync(pdfPath)) {
-            console.error('File not found:', pdfPath);
             return resolve({ success: false, error: 'File not found' });
         }
 
@@ -73,16 +72,14 @@ async function countPagesForFile(pdfPath, expectedPages) {
     });
 }
 
-async function runTests() {
-    for (const test of TEST_CASES) {
-        const pdfPath = path.join(__dirname, 'resources', test.file);
-        const result = await countPagesForFile(pdfPath, test.expected);
-        if (result.success) {
-            console.log(`PASS: ${test.file} - Pages: ${result.actual}`);
-        } else {
-            console.error(`FAIL: ${test.file} - ${result.error}`);
-        }
-    }
-}
-
-runTests();
+describe('PDF Count Pages API', function () {
+    this.timeout(10000); // Allow up to 10s per test
+    TEST_CASES.forEach(({ file, expected }) => {
+        it(`should return ${expected} pages for ${file}`, async function () {
+            const pdfPath = path.join(__dirname, 'resources', file);
+            const result = await countPagesForFile(pdfPath, expected);
+            assert.strictEqual(result.success, true, result.error || 'Unknown error');
+            assert.strictEqual(result.actual, expected, result.error || 'Page count mismatch');
+        });
+    });
+});

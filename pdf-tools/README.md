@@ -4,25 +4,35 @@ This Dockerized microservice provides general-purpose PDF manipulation tools via
 
 ---
 
-## Build & Run Locally
+### Build & Run Locally
 
-```sh
+```
 docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
 ```
 
-## Run tests
+### Run tests
 
-There are some basic tests to check everything works. To run them, start the container on localhost, move inside tests folder and run:
+Make sure the container is running on your local machine, and packages are installed (npm ci):
 
 ```
-node test-count-pages.js
-node test-html-to-pdf.js
-node test-.....
+npx mocha
+```
+
+### Publish to docker hub
+
+Open a cmd at the pdf-tools docker image folder and run:
+
+```
+docker login
+docker build -t edertone/pdf-tools:latest .
+docker push edertone/pdf-tools:latest
 ```
 
 ---
 
-## 1. PDF Validation
+## API Documentation
+
+### 1. PDF Validation
 
 Verify that a provided file is a valid PDF document
 
@@ -60,7 +70,7 @@ console.log("Is valid PDF:", result.valid);
 
 ---
 
-## 2. PDF Page Count
+### 2. PDF Page Count
 
 Count the number of pages on a provided PDF file
 
@@ -90,7 +100,7 @@ curl -X POST -F "pdf=@document.pdf" http://localhost:5001/pdf-count-pages
 
 ---
 
-## 3. PDF Page to JPEG
+### 3. PDF Page to JPEG
 
 Convert a specific PDF page to a JPEG image with custom quality and resolution.
 
@@ -130,7 +140,7 @@ const imageBuffer = await response.arrayBuffer();
 
 ---
 
-## 4. HTML to PDF
+### 4. HTML to PDF
 
 Convert HTML content to a pixel-perfect PDF using the Chromium engine.
 
