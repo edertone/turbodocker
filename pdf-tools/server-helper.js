@@ -220,102 +220,19 @@ async function countPdfPages(pdfBuffer) {
 }
 
 /**
- * Converts a specific page of a PDF buffer to a JPEG image using Ghostscript.
- * @param {Buffer} pdfBuffer - The PDF file buffer.
- * @param {number} page - The zero-based page index to convert.
- * @param {number} [jpgQuality=90] - JPEG quality (1-100).
- * @param {number} [dpi=150] - Dots per inch for rendering (72-2400).
- * @returns {Promise<Buffer>} The JPEG image buffer of the specified page.
- * @throws {Error} If conversion fails or parameters are invalid.
- */
-async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
-    // Validate parameters
-    if (!Number.isInteger(page) || page < 0) {
-        throw new Error('Specified page must be a positive integer');
-    }
-
-    if (!Number.isInteger(jpgQuality) || jpgQuality < 1 || jpgQuality > 100) {
-        throw new Error('JPEG quality must be an integer between 1 and 100');
-    }
-
-    if (!Number.isInteger(dpi) || dpi < 72 || dpi > 2400) {
-        throw new Error('DPI must be an integer between 72 and 2400');
-    }
-
-    // Check for PDF header
-    if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
-        throw new Error('Invalid PDF buffer provided');
-    }
-
-    const gsExecutable = findGhostscriptExecutable();
-
-    // Build ghostscript arguments
-    const args = [
-        '-dNOPAUSE',
-        '-sDEVICE=jpeg',
-        '-dUseCIEColor',
-        '-dDOINTERPOLATE',
-        '-dTextAlphaBits=4',
-        '-dGraphicsAlphaBits=4',
-        '-sOutputFile=-', // Output to stdout
-        `-dFirstPage=${page + 1}`, // Convert 0-based to 1-based page numbering
-        `-dLastPage=${page + 1}`,
-        `-r${dpi}`,
-        `-dJPEGQ=${jpgQuality}`,
-        '-q', // Quiet mode
-        '-' // Read from stdin
-    ];
-
-    try {
-        const imageBuffer = await new Promise((resolve, reject) => {
-            const child = execFile(
-                gsExecutable,
-                args,
-                {
-                    encoding: null, // Get binary output
-                    maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large images
-                },
-                (error, stdout, stderr) => {
-                    if (error) {
-                        return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
-                    }
-
-                    // Check if output is too small (likely an error)
-                    if (stdout.length < 500) {
-                        const errorMsg = stdout.toString();
-                        if (errorMsg.includes('No pages will be processed')) {
-                            return reject(new Error(`Page ${page} does not exist in the PDF`));
-                        }
-                        return reject(new Error(`Ghostscript failed: ${errorMsg}`));
-                    }
-
-                    resolve(stdout);
-                }
-            );
-
-            // Write PDF buffer to stdin and close it
-            child.stdin.write(pdfBuffer);
-            child.stdin.end();
-        });
-
-        return imageBuffer;
-    } catch (error) {
-        throw new Error(`Could not convert PDF page to JPEG: ${error.message}`);
-    }
-}
-
-/**
- * Converts the first page (cover) of a PDF buffer to a JPEG thumbnail with custom dimensions.
+ * Converts a specific page of a PDF buffer to a JPEG image with custom dimensions.
  * Calculates missing width/height proportionally if only one is provided.
  * @param {Buffer} pdfBuffer - The PDF file buffer.
- * @param {Object} options - Options for thumbnail generation.
+ * @param {number} pageIndex - Zero-based index of the page to convert.
+ * @param {Object} options - Options for image generation.
  * @param {number} [options.width] - Desired width in pixels.
  * @param {number} [options.height] - Desired height in pixels.
  * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
- * @returns {Promise<Buffer>} The JPEG thumbnail buffer.
+ *
+ * @returns {Promise<Buffer>} The JPEG image buffer.
  * @throws {Error} If conversion fails or parameters are invalid.
  */
-async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
+async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
     const { width, height, jpegQuality = 90 } = options;
 
     // Validate parameters
@@ -327,6 +244,9 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
     }
     if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
+    }
+    if (!Number.isInteger(pageIndex) || pageIndex < 0) {
+        throw new Error('pageIndex must be a non-negative integer');
     }
     if (!width && !height) {
         throw new Error('Either width or height (or both) must be specified');
@@ -369,7 +289,8 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
     }
 
     const gsExecutable = findGhostscriptExecutable();
-    // Build ghostscript arguments for thumbnail generation
+    // Build ghostscript arguments for image generation
+    const pageNum = pageIndex + 1; // Ghostscript uses 1-based page numbers
     const args = [
         '-dNOPAUSE',
         '-sDEVICE=jpeg',
@@ -378,8 +299,8 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
         '-dTextAlphaBits=4',
         '-dGraphicsAlphaBits=4',
         '-sOutputFile=-', // Output to stdout
-        '-dFirstPage=1', // Always get the first page (cover)
-        '-dLastPage=1',
+        `-dFirstPage=${pageNum}`,
+        `-dLastPage=${pageNum}`,
         `-dJPEGQ=${jpegQuality}`,
         '-q' // Quiet mode
     ];
@@ -416,7 +337,7 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
         });
         return imageBuffer;
     } catch (error) {
-        throw new Error(`Could not generate PDF thumbnail: ${error.message}`);
+        throw new Error(`Could not generate PDF image: ${error.message}`);
     }
 }
 
@@ -477,6 +398,5 @@ module.exports = {
     convertHtmlToPdf,
     getPostVariables,
     isValidPdf,
-    getPdfPageAsJpg,
-    getPdfCoverThumbnailJpg
+    getPdfPageAsJpg
 };

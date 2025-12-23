@@ -6,8 +6,7 @@ const {
     convertHtmlToPdf,
     getPostVariables,
     isValidPdf,
-    getPdfPageAsJpg,
-    getPdfCoverThumbnailJpg
+    getPdfPageAsJpg
 } = require('./server-helper.js');
 
 // Global constants
@@ -15,7 +14,6 @@ const PORT = 5001;
 const ENDPOINT_PDF_IS_VALID = '/pdf-is-valid';
 const ENDPOINT_PDF_COUNT_PAGES = '/pdf-count-pages';
 const ENDPOINT_PDF_GET_PAGE_AS_JPG = '/pdf-get-page-as-jpg';
-const ENDPOINT_PDF_GET_COVER_THUMBNAIL_JPG = '/pdf-get-cover-thumbnail-jpg';
 const ENDPOINT_HTML_TO_PDF_BINARY = '/html-to-pdf-binary';
 const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 
@@ -23,7 +21,7 @@ const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 const server = http.createServer(async (req, res) => {
     switch (req.url) {
         case ENDPOINT_PDF_IS_VALID:
-            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data.')) return;
+            if (rejectNonPost(req, res)) return;
             try {
                 const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
                 const pdfBuffer = Buffer.from(pdfData, 'binary');
@@ -37,7 +35,7 @@ const server = http.createServer(async (req, res) => {
             }
             break;
         case ENDPOINT_PDF_COUNT_PAGES:
-            if (rejectNonPost(req, res, 'Method Not Allowed. Use POST with PDF data.')) return;
+            if (rejectNonPost(req, res)) return;
 
             try {
                 const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
@@ -53,23 +51,18 @@ const server = http.createServer(async (req, res) => {
             break;
 
         case ENDPOINT_PDF_GET_PAGE_AS_JPG:
-            if (
-                rejectNonPost(
-                    req,
-                    res,
-                    'Method Not Allowed. Use POST with PDF data, page number, jpgQuality, and dpi parameters.'
-                )
-            )
-                return;
+            if (rejectNonPost(req, res)) return;
 
             try {
-                const postData = await getPostVariables(req, ['pdf', 'page', 'jpgQuality', 'dpi']);
+                const postData = await getPostVariables(req, ['pdf', 'page'], ['width', 'height', 'jpegQuality']);
                 const pdfBuffer = Buffer.from(postData.pdf, 'binary');
-                const page = parseInt(postData.page, 10);
-                const jpgQuality = parseInt(postData.jpgQuality, 10);
-                const dpi = parseInt(postData.dpi, 10);
+                const pageIndex = parseInt(postData.page, 10);
+                const options = {};
+                if (postData.width !== undefined) options.width = parseInt(postData.width, 10);
+                if (postData.height !== undefined) options.height = parseInt(postData.height, 10);
+                if (postData.jpegQuality !== undefined) options.jpegQuality = parseInt(postData.jpegQuality, 10);
 
-                const imageBuffer = await getPdfPageAsJpg(pdfBuffer, page, jpgQuality, dpi);
+                const imageBuffer = await getPdfPageAsJpg(pdfBuffer, pageIndex, options);
 
                 res.writeHead(200, { 'Content-Type': 'image/jpeg' });
                 return res.end(imageBuffer);
@@ -80,47 +73,9 @@ const server = http.createServer(async (req, res) => {
             }
             break;
 
-        case ENDPOINT_PDF_GET_COVER_THUMBNAIL_JPG:
-            if (
-                rejectNonPost(
-                    req,
-                    res,
-                    'Method Not Allowed. Use POST with PDF data, optional width, height, and jpegQuality parameters.'
-                )
-            )
-                return;
-
-            try {
-                // Request mandatory 'pdf' field and optional width/height/quality fields
-                const postData = await getPostVariables(req, ['pdf'], ['width', 'height', 'jpegQuality']);
-                const pdfBuffer = Buffer.from(postData.pdf, 'binary');
-
-                // Parse optional parameters
-                const options = {};
-                if (postData.width !== undefined) {
-                    options.width = parseInt(postData.width, 10);
-                }
-                if (postData.height !== undefined) {
-                    options.height = parseInt(postData.height, 10);
-                }
-                if (postData.jpegQuality !== undefined) {
-                    options.jpegQuality = parseInt(postData.jpegQuality, 10);
-                }
-
-                const imageBuffer = await getPdfCoverThumbnailJpg(pdfBuffer, options);
-
-                res.writeHead(200, { 'Content-Type': 'image/jpeg' });
-                return res.end(imageBuffer);
-            } catch (error) {
-                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
-                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: error.message || 'Failed to generate PDF cover thumbnail.' }));
-            }
-            break;
-
         case ENDPOINT_HTML_TO_PDF_BINARY:
         case ENDPOINT_HTML_TO_PDF_BASE64:
-            if (rejectNonPost(req, res, 'Method Not Allowed. Use valid html string via POST html variable')) return;
+            if (rejectNonPost(req, res)) return;
 
             try {
                 const { html } = await getPostVariables(req, ['html']);

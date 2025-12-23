@@ -4,7 +4,7 @@ const path = require('path');
 const assert = require('assert');
 
 const PDF_FILE_PATH = path.join(__dirname, 'resources', 'sample30.pdf');
-const ENDPOINT = 'http://localhost:5001/pdf-get-cover-thumbnail-jpg';
+const ENDPOINT = 'http://localhost:5001/pdf-get-page-as-jpg';
 const OUT_DIR = path.join(__dirname, '..', 'tests-out');
 
 function ensureOutDir() {
@@ -13,7 +13,7 @@ function ensureOutDir() {
     }
 }
 
-function sendPdfToThumbnailEndpoint({ width, height, jpegQuality = 90 }) {
+function sendPdfToPageAsJpgEndpoint({ width, height, jpegQuality = 90, page = 0 }) {
     return new Promise((resolve, reject) => {
         if (!fs.existsSync(PDF_FILE_PATH)) {
             return reject(new Error('sample30.pdf not found in resources directory'));
@@ -25,6 +25,8 @@ function sendPdfToThumbnailEndpoint({ width, height, jpegQuality = 90 }) {
             pdfBuffer
         ];
 
+        // Always send page=0 for cover
+        formFields.push(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="page"\r\n\r\n${page}`);
         if (width !== undefined) {
             formFields.push(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="width"\r\n\r\n${width}`);
         }
@@ -67,12 +69,12 @@ function sendPdfToThumbnailEndpoint({ width, height, jpegQuality = 90 }) {
     });
 }
 
-describe('PDF Get Cover Thumbnail JPG API', function () {
+describe('PDF Get Page As JPG API (cover page)', function () {
     this.timeout(15000);
     before(ensureOutDir);
 
     it('should return a JPEG thumbnail with width only', async function () {
-        const result = await sendPdfToThumbnailEndpoint({ width: 300 });
+        const result = await sendPdfToPageAsJpgEndpoint({ width: 300 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');
@@ -83,7 +85,7 @@ describe('PDF Get Cover Thumbnail JPG API', function () {
     });
 
     it('should return a JPEG thumbnail with height only', async function () {
-        const result = await sendPdfToThumbnailEndpoint({ height: 400 });
+        const result = await sendPdfToPageAsJpgEndpoint({ height: 400 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');
@@ -94,7 +96,7 @@ describe('PDF Get Cover Thumbnail JPG API', function () {
     });
 
     it('should return a JPEG thumbnail with both width and height', async function () {
-        const result = await sendPdfToThumbnailEndpoint({ width: 250, height: 350 });
+        const result = await sendPdfToPageAsJpgEndpoint({ width: 250, height: 350 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');
@@ -105,7 +107,7 @@ describe('PDF Get Cover Thumbnail JPG API', function () {
     });
 
     it('should return a high quality JPEG thumbnail', async function () {
-        const result = await sendPdfToThumbnailEndpoint({ width: 300, jpegQuality: 95 });
+        const result = await sendPdfToPageAsJpgEndpoint({ width: 300, jpegQuality: 95 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(
@@ -119,7 +121,7 @@ describe('PDF Get Cover Thumbnail JPG API', function () {
     });
 
     it('should return a low quality JPEG thumbnail', async function () {
-        const result = await sendPdfToThumbnailEndpoint({ width: 300, jpegQuality: 30 });
+        const result = await sendPdfToPageAsJpgEndpoint({ width: 300, jpegQuality: 30 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');
@@ -130,7 +132,7 @@ describe('PDF Get Cover Thumbnail JPG API', function () {
     });
 
     it('should return error 500 when no dimensions are provided', async function () {
-        const result = await sendPdfToThumbnailEndpoint({});
+        const result = await sendPdfToPageAsJpgEndpoint({});
         assert.strictEqual(result.statusCode, 500, 'Expected HTTP 500 for missing dimensions');
         const responseText = result.buffer.toString();
         const response = JSON.parse(responseText);
