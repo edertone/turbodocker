@@ -9,11 +9,11 @@ const ENDPOINT = 'http://localhost:5001/pdf-count-pages';
 const TEST_CASES = [
     { file: 'sample1.pdf', expected: 1 },
     { file: 'sample4.pdf', expected: 4 },
-    { file: 'sample30.pdf', expected: 30 },
+    { file: 'sample30.pdf', expected: 30 }
 ];
 
 function countPagesForFile(pdfPath, expectedPages) {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
         if (!fs.existsSync(pdfPath)) {
             return resolve({ success: false, error: 'File not found' });
         }
@@ -27,7 +27,7 @@ function countPagesForFile(pdfPath, expectedPages) {
             Buffer.from(`Content-Disposition: form-data; name="pdf"; filename="${fileName}"\r\n`),
             Buffer.from('Content-Type: application/pdf\r\n\r\n'),
             fileContents,
-            Buffer.from(`\r\n--${boundary}--\r\n`),
+            Buffer.from(`\r\n--${boundary}--\r\n`)
         ]);
 
         const req = http.request(
@@ -36,12 +36,12 @@ function countPagesForFile(pdfPath, expectedPages) {
                 method: 'POST',
                 headers: {
                     'Content-Type': `multipart/form-data; boundary=${boundary}`,
-                    'Content-Length': body.length,
-                },
+                    'Content-Length': body.length
+                }
             },
-            (res) => {
+            res => {
                 let data = '';
-                res.on('data', (chunk) => (data += chunk));
+                res.on('data', chunk => (data += chunk));
                 res.on('end', () => {
                     try {
                         const result = JSON.parse(data);
@@ -51,7 +51,7 @@ function countPagesForFile(pdfPath, expectedPages) {
                                 success: pass,
                                 actual: result.pages,
                                 expected: expectedPages,
-                                error: pass ? null : `Expected ${expectedPages}, got ${result.pages}`,
+                                error: pass ? null : `Expected ${expectedPages}, got ${result.pages}`
                             });
                         } else {
                             resolve({ success: false, error: result.error || data });
@@ -63,7 +63,7 @@ function countPagesForFile(pdfPath, expectedPages) {
             }
         );
 
-        req.on('error', (err) => {
+        req.on('error', err => {
             resolve({ success: false, error: 'Request error: ' + err });
         });
 
