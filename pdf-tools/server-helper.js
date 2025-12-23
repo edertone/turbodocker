@@ -73,7 +73,10 @@ function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
 // Function to get specific variables from a POST request
 // Supports JSON, urlencoded, and multipart/form-data
 // Returns an object with the requested variable names and their values
-async function getPostVariables(req, variableNames = []) {
+async function getPostVariables(req, mandatoryVariableNames = [], optionalVariableNames = []) {
+    // Combine mandatory and optional fields to get all fields to extract
+    const allVariableNames = [...mandatoryVariableNames, ...optionalVariableNames];
+    
     const bodyChunks = [];
     for await (const chunk of req) {
         bodyChunks.push(chunk);
@@ -85,7 +88,7 @@ async function getPostVariables(req, variableNames = []) {
     if (contentType.includes('application/json')) {
         try {
             const data = JSON.parse(body.toString());
-            for (const name of variableNames) {
+            for (const name of allVariableNames) {
                 if (data[name] !== undefined) {
                     result[name] = data[name];
                 }
@@ -95,7 +98,7 @@ async function getPostVariables(req, variableNames = []) {
         }
     } else if (contentType.includes('application/x-www-form-urlencoded')) {
         const params = new URLSearchParams(body.toString());
-        for (const name of variableNames) {
+        for (const name of allVariableNames) {
             if (params.has(name)) {
                 result[name] = params.get(name);
             }
@@ -117,7 +120,7 @@ async function getPostVariables(req, variableNames = []) {
             const headers = part.substring(0, headerEndIndex);
             const contentDispositionMatch = headers.match(/Content-Disposition: form-data; name="([^"]+)"/);
 
-            if (contentDispositionMatch && variableNames.includes(contentDispositionMatch[1])) {
+            if (contentDispositionMatch && allVariableNames.includes(contentDispositionMatch[1])) {
                 const name = contentDispositionMatch[1];
                 // Find start and end of content
                 const contentStart = headerEndIndex + 4;
@@ -132,7 +135,8 @@ async function getPostVariables(req, variableNames = []) {
         }
     }
 
-    for (const field of variableNames) {
+    // Only check for mandatory fields
+    for (const field of mandatoryVariableNames) {
         if (!result[field]) {
             throw new Error(`Missing POST variable '${field}'`);
         }
@@ -265,6 +269,95 @@ async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
     }
 }
 
+// Convert the first page (cover) of a PDF to JPEG thumbnail with custom dimensions
+// Similar to getPdfPageAsJpg but specifically for thumbnails with width/height control
+async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
+    const { width, height, jpegQuality = 90 } = options;
+    
+    // Validate parameters
+    if (width !== undefined && (!Number.isInteger(width) || width < 10 || width > 4000)) {
+        throw new Error('Width must be an integer between 10 and 4000 pixels');
+    }
+    
+    if (height !== undefined && (!Number.isInteger(height) || height < 10 || height > 4000)) {
+        throw new Error('Height must be an integer between 10 and 4000 pixels');
+    }
+    
+    if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
+        throw new Error('JPEG quality must be an integer between 1 and 100');
+    }
+    
+    if (!width && !height) {
+        throw new Error('Either width or height (or both) must be specified');
+    }
+
+    // Check for PDF header
+    if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
+        throw new Error('Invalid PDF buffer provided');
+    }
+
+    const gsExecutable = findGhostscriptExecutable();
+    
+    // Build ghostscript arguments for thumbnail generation
+    const args = [
+        '-dNOPAUSE',
+        '-sDEVICE=jpeg',
+        '-dUseCIEColor',
+        '-dDOINTERPOLATE',
+        '-dTextAlphaBits=4',
+        '-dGraphicsAlphaBits=4',
+        '-sOutputFile=-',  // Output to stdout
+        '-dFirstPage=1',   // Always get the first page (cover)
+        '-dLastPage=1',
+        `-dJPEGQ=${jpegQuality}`,
+        '-q'  // Quiet mode
+    ];
+    
+    // Add width/height parameters if specified
+    // Ghostscript will maintain aspect ratio if only one dimension is provided
+    if (width && height) {
+        args.push(`-dDEVICEWIDTHPOINTS=${width}`, `-dDEVICEHEIGHTPOINTS=${height}`);
+        args.push('-dPDFFitPage=true');  // Scale to fit exactly
+    } else if (width) {
+        args.push(`-dDEVICEWIDTHPOINTS=${width}`);
+        args.push('-dFIXEDMEDIA=true');  // Use fixed width, auto height
+    } else if (height) {
+        args.push(`-dDEVICEHEIGHTPOINTS=${height}`);
+        args.push('-dFIXEDMEDIA=true');  // Use fixed height, auto width
+    }
+    
+    args.push('-');  // Read from stdin
+
+    try {
+        const imageBuffer = await new Promise((resolve, reject) => {
+            const child = execFile(gsExecutable, args, { 
+                encoding: null,  // Get binary output
+                maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large images
+            }, (error, stdout, stderr) => {
+                if (error) {
+                    return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
+                }
+                
+                // Check if output is too small (likely an error)
+                if (stdout.length < 500) {
+                    const errorMsg = stdout.toString();
+                    return reject(new Error(`Ghostscript failed: ${errorMsg}`));
+                }
+                
+                resolve(stdout);
+            });
+            
+            // Write PDF buffer to stdin and close it
+            child.stdin.write(pdfBuffer);
+            child.stdin.end();
+        });
+        
+        return imageBuffer;
+    } catch (error) {
+        throw new Error(`Could not generate PDF thumbnail: ${error.message}`);
+    }
+}
+
 // Function to convert HTML content to PDF using headless Chromium
 // It uses temporary files for input and output to avoid command line length limits
 // Pdf conversion is done by launching chromium with appropriate flags
@@ -323,5 +416,6 @@ module.exports = {
     convertHtmlToPdf,
     getPostVariables,
     isValidPdf,
-    getPdfPageAsJpg
+    getPdfPageAsJpg,
+    getPdfCoverThumbnailJpg
 };
