@@ -10,6 +10,16 @@ This Dockerized microservice provides general-purpose PDF manipulation tools via
 docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
 ```
 
+## Run tests
+
+There are some basic tests to check everything works. To run them, start the container on localhost, move inside tests folder and run:
+
+```
+node test-count-pages.js
+node test-html-to-pdf.js
+node test-.....
+```
+
 ---
 
 ## 1. PDF Validation
