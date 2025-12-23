@@ -273,20 +273,17 @@ async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
 // Similar to getPdfPageAsJpg but specifically for thumbnails with width/height control
 async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
     const { width, height, jpegQuality = 90 } = options;
-    
+
     // Validate parameters
     if (width !== undefined && (!Number.isInteger(width) || width < 10 || width > 4000)) {
         throw new Error('Width must be an integer between 10 and 4000 pixels');
     }
-    
     if (height !== undefined && (!Number.isInteger(height) || height < 10 || height > 4000)) {
         throw new Error('Height must be an integer between 10 and 4000 pixels');
     }
-    
     if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
     }
-    
     if (!width && !height) {
         throw new Error('Either width or height (or both) must be specified');
     }
@@ -296,8 +293,38 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
         throw new Error('Invalid PDF buffer provided');
     }
 
+    // If only one dimension is specified, calculate the other proportionally using the original PDF page size
+    let finalWidth = width;
+    let finalHeight = height;
+    if (!width || !height) {
+        // Use pdfinfo to get the original page size (in points)
+        const pdfinfoOutput = await new Promise((resolve, reject) => {
+            const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
+                if (error) return reject(new Error(`pdfinfo failed: ${stderr || error.message}`));
+                resolve(stdout);
+            });
+            child.stdin.write(pdfBuffer);
+            child.stdin.end();
+        });
+        // Parse page size (look for "Page size: WxH pts")
+        const sizeMatch = pdfinfoOutput.match(/Page size:\s*(\d+(?:\.\d+)?) x (\d+(?:\.\d+)?) pts/);
+        if (!sizeMatch) {
+            throw new Error('Could not determine PDF page size');
+        }
+        const origWidth = parseFloat(sizeMatch[1]);
+        const origHeight = parseFloat(sizeMatch[2]);
+        if (!width) {
+            // Calculate width proportionally
+            finalHeight = height;
+            finalWidth = Math.round((origWidth / origHeight) * finalHeight);
+        } else if (!height) {
+            // Calculate height proportionally
+            finalWidth = width;
+            finalHeight = Math.round((origHeight / origWidth) * finalWidth);
+        }
+    }
+
     const gsExecutable = findGhostscriptExecutable();
-    
     // Build ghostscript arguments for thumbnail generation
     const args = [
         '-dNOPAUSE',
@@ -312,46 +339,32 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
         `-dJPEGQ=${jpegQuality}`,
         '-q'  // Quiet mode
     ];
-    
-    // Add width/height parameters if specified
-    // Ghostscript will maintain aspect ratio if only one dimension is provided
-    if (width && height) {
-        args.push(`-dDEVICEWIDTHPOINTS=${width}`, `-dDEVICEHEIGHTPOINTS=${height}`);
-        args.push('-dPDFFitPage=true');  // Scale to fit exactly
-    } else if (width) {
-        args.push(`-dDEVICEWIDTHPOINTS=${width}`);
-        args.push('-dFIXEDMEDIA=true');  // Use fixed width, auto height
-    } else if (height) {
-        args.push(`-dDEVICEHEIGHTPOINTS=${height}`);
-        args.push('-dFIXEDMEDIA=true');  // Use fixed height, auto width
-    }
-    
+    // Always specify both width and height, calculated if needed
+    args.push(`-dDEVICEWIDTHPOINTS=${finalWidth}`);
+    args.push(`-dDEVICEHEIGHTPOINTS=${finalHeight}`);
+    args.push('-dPDFFitPage=true');
     args.push('-');  // Read from stdin
 
     try {
         const imageBuffer = await new Promise((resolve, reject) => {
-            const child = execFile(gsExecutable, args, { 
+            const child = execFile(gsExecutable, args, {
                 encoding: null,  // Get binary output
                 maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large images
             }, (error, stdout, stderr) => {
                 if (error) {
                     return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
                 }
-                
                 // Check if output is too small (likely an error)
                 if (stdout.length < 500) {
                     const errorMsg = stdout.toString();
                     return reject(new Error(`Ghostscript failed: ${errorMsg}`));
                 }
-                
                 resolve(stdout);
             });
-            
             // Write PDF buffer to stdin and close it
             child.stdin.write(pdfBuffer);
             child.stdin.end();
         });
-        
         return imageBuffer;
     } catch (error) {
         throw new Error(`Could not generate PDF thumbnail: ${error.message}`);
