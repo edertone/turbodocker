@@ -8,6 +8,58 @@ const os = require('node:os');
 let _ghostscriptExecutable = null;
 let _chromeExecutable = null;
 
+// Function to find the chromium executable that is available on the system
+function findChromeExecutable() {
+    // Return cached result if available
+    if (_chromeExecutable !== null) {
+        return _chromeExecutable;
+    }
+
+    const candidates = [
+        'chromium',
+        'chromium-browser',
+        'google-chrome-stable',
+        'google-chrome',
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            execSync(`command -v ${candidate}`);
+            _chromeExecutable = candidate;
+            return candidate;
+        } catch {
+            continue;
+        }
+    }
+
+    throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
+}
+
+// Function to find the ghostscript executable that is available on the system
+function findGhostscriptExecutable() {
+    // Return cached result if available
+    if (_ghostscriptExecutable !== null) {
+        return _ghostscriptExecutable;
+    }
+
+    const candidates = [
+        'gs',
+        'ghostscript',
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            execSync(`command -v ${candidate}`, { stdio: 'ignore' });
+            _ghostscriptExecutable = candidate;
+            return candidate;
+        } catch {
+            continue;
+        }
+    }
+
+    throw new Error('Could not find a ghostscript executable. Please install ghostscript.');
+}
+
 // Function to reject non-POST requests
 function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
     if (req.method !== 'POST') {
@@ -138,58 +190,6 @@ async function countPdfPagesWithPdfinfo(pdfBuffer) {
     } catch (error) {
         throw new Error(`Could not determine page count: ${error.message}`);
     }
-}
-
-// Function to find the chromium executable that is available on the system
-function findChromeExecutable() {
-    // Return cached result if available
-    if (_chromeExecutable !== null) {
-        return _chromeExecutable;
-    }
-
-    const candidates = [
-        'chromium',
-        'chromium-browser',
-        'google-chrome-stable',
-        'google-chrome',
-    ];
-
-    for (const candidate of candidates) {
-        try {
-            execSync(`command -v ${candidate}`);
-            _chromeExecutable = candidate;
-            return candidate;
-        } catch {
-            continue;
-        }
-    }
-
-    throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
-}
-
-// Function to find the ghostscript executable that is available on the system
-function findGhostscriptExecutable() {
-    // Return cached result if available
-    if (_ghostscriptExecutable !== null) {
-        return _ghostscriptExecutable;
-    }
-
-    const candidates = [
-        'gs',
-        'ghostscript',
-    ];
-
-    for (const candidate of candidates) {
-        try {
-            execSync(`command -v ${candidate}`, { stdio: 'ignore' });
-            _ghostscriptExecutable = candidate;
-            return candidate;
-        } catch {
-            continue;
-        }
-    }
-
-    throw new Error('Could not find a ghostscript executable. Please install ghostscript.');
 }
 
 // Convert a specific PDF page to JPEG using Ghostscript
