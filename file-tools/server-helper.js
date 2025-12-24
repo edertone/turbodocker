@@ -8,19 +8,19 @@ const os = require('node:os');
 let _ghostscriptExecutable = null;
 let _chromeExecutable = null;
 
-// Function to find the chromium executable that is available on the system
+/**
+ * Finds the Chromium-based browser executable available on the system.
+ * Checks for common executable names and caches the result.
+ * @returns {string} The name of the Chromium executable found.
+ * @throws {Error} If no Chromium executable is found on the system.
+ */
 function findChromeExecutable() {
     // Return cached result if available
     if (_chromeExecutable !== null) {
         return _chromeExecutable;
     }
 
-    const candidates = [
-        'chromium',
-        'chromium-browser',
-        'google-chrome-stable',
-        'google-chrome',
-    ];
+    const candidates = ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome'];
 
     for (const candidate of candidates) {
         try {
@@ -35,17 +35,19 @@ function findChromeExecutable() {
     throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
 }
 
-// Function to find the ghostscript executable that is available on the system
+/**
+ * Finds the Ghostscript executable available on the system.
+ * Checks for common executable names and caches the result.
+ * @returns {string} The name of the Ghostscript executable found.
+ * @throws {Error} If no Ghostscript executable is found on the system.
+ */
 function findGhostscriptExecutable() {
     // Return cached result if available
     if (_ghostscriptExecutable !== null) {
         return _ghostscriptExecutable;
     }
 
-    const candidates = [
-        'gs',
-        'ghostscript',
-    ];
+    const candidates = ['gs', 'ghostscript'];
 
     for (const candidate of candidates) {
         try {
@@ -60,7 +62,13 @@ function findGhostscriptExecutable() {
     throw new Error('Could not find a ghostscript executable. Please install ghostscript.');
 }
 
-// Function to reject non-POST requests
+/**
+ * Rejects HTTP requests that are not POST, sending a 405 response.
+ * @param {import('http').IncomingMessage} req - The HTTP request object.
+ * @param {import('http').ServerResponse} res - The HTTP response object.
+ * @param {string} [message='Method Not Allowed. Use POST.'] - Optional error message.
+ * @returns {boolean} True if the request was rejected, false otherwise.
+ */
 function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
     if (req.method !== 'POST') {
         res.writeHead(405, { 'Content-Type': 'application/json' });
@@ -70,13 +78,19 @@ function rejectNonPost(req, res, message = 'Method Not Allowed. Use POST.') {
     return false;
 }
 
-// Function to get specific variables from a POST request
-// Supports JSON, urlencoded, and multipart/form-data
-// Returns an object with the requested variable names and their values
+/**
+ * Extracts specific variables from a POST request body.
+ * Supports JSON, urlencoded, and multipart/form-data content types.
+ * @param {import('http').IncomingMessage} req - The HTTP request object.
+ * @param {string[]} [mandatoryVariableNames=[]] - List of required variable names.
+ * @param {string[]} [optionalVariableNames=[]] - List of optional variable names.
+ * @returns {Promise<Object>} An object with the requested variable names and their values (Buffer for file fields).
+ * @throws {Error} If a mandatory variable is missing or the payload is invalid.
+ */
 async function getPostVariables(req, mandatoryVariableNames = [], optionalVariableNames = []) {
     // Combine mandatory and optional fields to get all fields to extract
     const allVariableNames = [...mandatoryVariableNames, ...optionalVariableNames];
-    
+
     const bodyChunks = [];
     for await (const chunk of req) {
         bodyChunks.push(chunk);
@@ -145,13 +159,17 @@ async function getPostVariables(req, mandatoryVariableNames = [], optionalVariab
     return result;
 }
 
-// Check if a Buffer is a valid PDF file
+/**
+ * Checks if a Buffer contains a valid PDF file by header and by running pdfinfo.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @returns {Promise<boolean>} True if the buffer is a valid PDF, false otherwise.
+ */
 async function isValidPdf(pdfBuffer) {
     // Check for PDF header
     if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
         return false;
     }
-    
+
     // Use pdfinfo with stdin to validate the PDF
     try {
         await new Promise((resolve, reject) => {
@@ -161,7 +179,7 @@ async function isValidPdf(pdfBuffer) {
                 }
                 resolve(stdout);
             });
-            
+
             // Write PDF buffer to stdin and close it
             child.stdin.write(pdfBuffer);
             child.stdin.end();
@@ -172,8 +190,13 @@ async function isValidPdf(pdfBuffer) {
     }
 }
 
-// Count PDF pages using pdfinfo
-async function countPdfPagesWithPdfinfo(pdfBuffer) {
+/**
+ * Counts the number of pages in a PDF buffer using pdfinfo.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @returns {Promise<number>} The number of pages in the PDF.
+ * @throws {Error} If the page count cannot be determined.
+ */
+async function countPdfPages(pdfBuffer) {
     try {
         const output = await new Promise((resolve, reject) => {
             const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
@@ -182,12 +205,12 @@ async function countPdfPagesWithPdfinfo(pdfBuffer) {
                 }
                 resolve(stdout);
             });
-            
+
             // Write PDF buffer to stdin and close it
             child.stdin.write(pdfBuffer);
             child.stdin.end();
         });
-        
+
         const match = output.match(/^Pages:\s+(\d+)/m);
         if (!match) throw new Error('Could not determine page count');
         return parseInt(match[1], 10);
@@ -196,93 +219,34 @@ async function countPdfPagesWithPdfinfo(pdfBuffer) {
     }
 }
 
-// Convert a specific PDF page to JPEG using Ghostscript
-// Similar to PHP method: getPageAsJpg($pdfFilePath, $page, $jpgQuality = 90, $dpi = '150')
-async function getPdfPageAsJpg(pdfBuffer, page, jpgQuality = 90, dpi = 150) {
-    // Validate parameters
-    if (!Number.isInteger(page) || page < 0) {
-        throw new Error('Specified page must be a positive integer');
-    }
-    
-    if (!Number.isInteger(jpgQuality) || jpgQuality < 1 || jpgQuality > 100) {
-        throw new Error('JPEG quality must be an integer between 1 and 100');
-    }
-    
-    if (!Number.isInteger(dpi) || dpi < 72 || dpi > 2400) {
-        throw new Error('DPI must be an integer between 72 and 2400');
-    }
-
-    // Check for PDF header
-    if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
-        throw new Error('Invalid PDF buffer provided');
-    }
-
-    const gsExecutable = findGhostscriptExecutable();
-    
-    // Build ghostscript arguments (equivalent to the PHP command)
-    const args = [
-        '-dNOPAUSE',
-        '-sDEVICE=jpeg',
-        '-dUseCIEColor',
-        '-dDOINTERPOLATE',
-        '-dTextAlphaBits=4',
-        '-dGraphicsAlphaBits=4',
-        '-sOutputFile=-',  // Output to stdout
-        `-dFirstPage=${page + 1}`,  // Convert 0-based to 1-based page numbering
-        `-dLastPage=${page + 1}`,
-        `-r${dpi}`,
-        `-dJPEGQ=${jpgQuality}`,
-        '-q',  // Quiet mode
-        '-'    // Read from stdin
-    ];
-
-    try {
-        const imageBuffer = await new Promise((resolve, reject) => {
-            const child = execFile(gsExecutable, args, { 
-                encoding: null,  // Get binary output
-                maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large images
-            }, (error, stdout, stderr) => {
-                if (error) {
-                    return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
-                }
-                
-                // Check if output is too small (likely an error)
-                if (stdout.length < 500) {
-                    const errorMsg = stdout.toString();
-                    if (errorMsg.includes('No pages will be processed')) {
-                        return reject(new Error(`Page ${page} does not exist in the PDF`));
-                    }
-                    return reject(new Error(`Ghostscript failed: ${errorMsg}`));
-                }
-                
-                resolve(stdout);
-            });
-            
-            // Write PDF buffer to stdin and close it
-            child.stdin.write(pdfBuffer);
-            child.stdin.end();
-        });
-        
-        return imageBuffer;
-    } catch (error) {
-        throw new Error(`Could not convert PDF page to JPEG: ${error.message}`);
-    }
-}
-
-// Convert the first page (cover) of a PDF to JPEG thumbnail with custom dimensions
-// Similar to getPdfPageAsJpg but specifically for thumbnails with width/height control
-async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
+/**
+ * Converts a specific page of a PDF buffer to a JPEG image with custom dimensions.
+ * Calculates missing width/height proportionally if only one is provided.
+ * @param {Buffer} pdfBuffer - The PDF file buffer.
+ * @param {number} pageIndex - Zero-based index of the page to convert.
+ * @param {Object} options - Options for image generation.
+ * @param {number} [options.width] - Desired width in pixels.
+ * @param {number} [options.height] - Desired height in pixels.
+ * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
+ *
+ * @returns {Promise<Buffer>} The JPEG image buffer.
+ * @throws {Error} If conversion fails or parameters are invalid.
+ */
+async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
     const { width, height, jpegQuality = 90 } = options;
 
     // Validate parameters
-    if (width !== undefined && (!Number.isInteger(width) || width < 10 || width > 4000)) {
-        throw new Error('Width must be an integer between 10 and 4000 pixels');
+    if (width !== undefined && (!Number.isInteger(width) || width < 1 || width > 10000)) {
+        throw new Error('Width must be an integer between 1 and 10000 pixels');
     }
-    if (height !== undefined && (!Number.isInteger(height) || height < 10 || height > 4000)) {
-        throw new Error('Height must be an integer between 10 and 4000 pixels');
+    if (height !== undefined && (!Number.isInteger(height) || height < 1 || height > 10000)) {
+        throw new Error('Height must be an integer between 1 and 10000 pixels');
     }
     if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
+    }
+    if (!Number.isInteger(pageIndex) || pageIndex < 0) {
+        throw new Error('pageIndex must be a non-negative integer');
     }
     if (!width && !height) {
         throw new Error('Either width or height (or both) must be specified');
@@ -325,7 +289,8 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
     }
 
     const gsExecutable = findGhostscriptExecutable();
-    // Build ghostscript arguments for thumbnail generation
+    // Build ghostscript arguments for image generation
+    const pageNum = pageIndex + 1; // Ghostscript uses 1-based page numbers
     const args = [
         '-dNOPAUSE',
         '-sDEVICE=jpeg',
@@ -333,48 +298,56 @@ async function getPdfCoverThumbnailJpg(pdfBuffer, options = {}) {
         '-dDOINTERPOLATE',
         '-dTextAlphaBits=4',
         '-dGraphicsAlphaBits=4',
-        '-sOutputFile=-',  // Output to stdout
-        '-dFirstPage=1',   // Always get the first page (cover)
-        '-dLastPage=1',
+        '-sOutputFile=-', // Output to stdout
+        `-dFirstPage=${pageNum}`,
+        `-dLastPage=${pageNum}`,
         `-dJPEGQ=${jpegQuality}`,
-        '-q'  // Quiet mode
+        '-q' // Quiet mode
     ];
     // Always specify both width and height, calculated if needed
     args.push(`-dDEVICEWIDTHPOINTS=${finalWidth}`);
     args.push(`-dDEVICEHEIGHTPOINTS=${finalHeight}`);
     args.push('-dPDFFitPage=true');
-    args.push('-');  // Read from stdin
+    args.push('-'); // Read from stdin
 
     try {
         const imageBuffer = await new Promise((resolve, reject) => {
-            const child = execFile(gsExecutable, args, {
-                encoding: null,  // Get binary output
-                maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large images
-            }, (error, stdout, stderr) => {
-                if (error) {
-                    return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
+            const child = execFile(
+                gsExecutable,
+                args,
+                {
+                    encoding: null, // Get binary output
+                    maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large images
+                },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        return reject(new Error(`Ghostscript failed: ${stderr || error.message}`));
+                    }
+                    // Check if output is too small (likely an error)
+                    if (stdout.length < 500) {
+                        const errorMsg = stdout.toString();
+                        return reject(new Error(`Ghostscript failed: ${errorMsg}`));
+                    }
+                    resolve(stdout);
                 }
-                // Check if output is too small (likely an error)
-                if (stdout.length < 500) {
-                    const errorMsg = stdout.toString();
-                    return reject(new Error(`Ghostscript failed: ${errorMsg}`));
-                }
-                resolve(stdout);
-            });
+            );
             // Write PDF buffer to stdin and close it
             child.stdin.write(pdfBuffer);
             child.stdin.end();
         });
         return imageBuffer;
     } catch (error) {
-        throw new Error(`Could not generate PDF thumbnail: ${error.message}`);
+        throw new Error(`Could not generate PDF image: ${error.message}`);
     }
 }
 
-// Function to convert HTML content to PDF using headless Chromium
-// It uses temporary files for input and output to avoid command line length limits
-// Pdf conversion is done by launching chromium with appropriate flags
-// Returns a Buffer containing the generated PDF
+/**
+ * Converts HTML content to a PDF buffer using headless Chromium.
+ * Uses temporary files for input and output to avoid command line length limits.
+ * @param {string} html - The HTML content to convert.
+ * @returns {Promise<Buffer>} The generated PDF as a Buffer.
+ * @throws {Error} If PDF generation fails.
+ */
 async function convertHtmlToPdf(html) {
     const chromeExecutable = findChromeExecutable();
     const uniqueId = crypto.randomUUID();
@@ -413,22 +386,17 @@ async function convertHtmlToPdf(html) {
         // Read and return PDF buffer
         const pdfBuffer = await fs.readFile(outputPdfPath);
         return pdfBuffer;
-
     } finally {
         // Clean up temp files regardless of success/failure
-        await Promise.allSettled([
-            fs.unlink(inputHtmlPath),
-            fs.unlink(outputPdfPath)
-        ]);
+        await Promise.allSettled([fs.unlink(inputHtmlPath), fs.unlink(outputPdfPath)]);
     }
 }
 
 module.exports = {
     rejectNonPost,
-    countPdfPagesWithPdfinfo,
+    countPdfPages,
     convertHtmlToPdf,
     getPostVariables,
     isValidPdf,
-    getPdfPageAsJpg,
-    getPdfCoverThumbnailJpg
+    getPdfPageAsJpg
 };

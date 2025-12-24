@@ -1,36 +1,6 @@
-# PDF Tools Microservice
+# File Tools Microservice
 
-This Dockerized microservice provides general-purpose PDF manipulation tools via HTTP API endpoints on port 5001.
-
----
-
-### Build & Run Locally
-
-```
-docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
-```
-
-### Run tests
-
-Make sure the container is running on your local machine, and packages are installed (npm ci):
-
-```
-npx mocha
-```
-
-### Publish to docker hub
-
-Open a cmd at the pdf-tools docker image folder and run:
-
-```
-docker login
-docker build -t edertone/pdf-tools:latest .
-docker push edertone/pdf-tools:latest
-```
-
----
-
-## API Documentation
+## PDF API endpoints documentation
 
 ### 1. PDF Validation
 
@@ -50,7 +20,7 @@ Verify that a provided file is a valid PDF document
 
 ```json
 {
-  "valid": true
+    "valid": true
 }
 ```
 
@@ -58,14 +28,14 @@ Verify that a provided file is a valid PDF document
 
 ```javascript
 const formData = new FormData();
-formData.append("pdf", pdfBuffer);
+formData.append('pdf', pdfBuffer);
 
-const response = await fetch("http://localhost:5001/pdf-is-valid", {
-  method: "POST",
-  body: formData,
+const response = await fetch('http://localhost:5001/pdf-is-valid', {
+    method: 'POST',
+    body: formData
 });
 const result = await response.json();
-console.log("Is valid PDF:", result.valid);
+console.log('Is valid PDF:', result.valid);
 ```
 
 ---
@@ -88,7 +58,7 @@ Count the number of pages on a provided PDF file
 
 ```json
 {
-  "pages": 5
+    "pages": 5
 }
 ```
 
@@ -108,14 +78,17 @@ Convert a specific PDF page to a JPEG image with custom quality and resolution.
 
 **Method:** `POST`
 
-**Content-Type:** `multipart/form-data`
+**Content-Type:** `multipart/form-data` or `application/json`
 
-**Parameters (all required):**
+**Parameters:**
 
-- `pdf` (file): The PDF file data
-- `page` (integer): Page number (0-based; 0 = first page)
-- `jpgQuality` (integer): JPEG quality (1-100)
-- `dpi` (integer): Resolution (72-2400)
+- `pdf` (required - file or base64 string): The PDF file data
+- `page` (required - integer): Page number (0 = first page)
+- `width` (optional - integer): Desired width in pixels (1-10000)
+- `height` (optional - integer): Desired height in pixels (1-10000)
+- `jpegQuality` (optional - integer): JPEG quality (1-100, default: 90)
+
+At least one of `width` or `height` must be provided. If only one is given, the other is calculated to preserve aspect ratio.
 
 **Response:**
 
@@ -125,14 +98,14 @@ Convert a specific PDF page to a JPEG image with custom quality and resolution.
 
 ```javascript
 const formData = new FormData();
-formData.append("pdf", pdfBuffer);
-formData.append("page", "0");
-formData.append("jpgQuality", "95");
-formData.append("dpi", "300");
+formData.append('pdf', pdfBuffer);
+formData.append('page', '0');
+formData.append('width', '800');
+formData.append('jpegQuality', '95');
 
-const response = await fetch("http://localhost:5001/pdf-get-page-as-jpg", {
-  method: "POST",
-  body: formData,
+const response = await fetch('http://localhost:5001/pdf-get-page-as-jpg', {
+    method: 'POST',
+    body: formData
 });
 const imageBuffer = await response.arrayBuffer();
 // Save or process the JPEG image

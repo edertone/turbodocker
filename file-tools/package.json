@@ -1,0 +1,12 @@
+{
+    "scripts": {
+        "test": "npx mocha",
+        "format": "npx prettier --write \"**/*.js\"",
+        "format:file": "prettier --write",
+        "format:check": "prettier --check \"**/*.js\""
+    },
+    "devDependencies": {
+        "mocha": "^11.7.5",
+        "prettier": "^3.7.4"
+    }
+}

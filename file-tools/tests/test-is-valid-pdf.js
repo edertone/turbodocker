@@ -25,25 +25,29 @@ function isValidPdfRequest(fileName) {
         );
         const post = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
         const body = Buffer.concat([pre, pdfBuffer, post]);
-        const req = http.request(ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'multipart/form-data; boundary=' + boundary,
-                'Content-Length': body.length,
-            },
-        }, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const result = JSON.parse(data);
-                    resolve(result);
-                } catch (e) {
-                    resolve({ error: data });
+        const req = http.request(
+            ENDPOINT,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'multipart/form-data; boundary=' + boundary,
+                    'Content-Length': body.length
                 }
-            });
-        });
-        req.on('error', (err) => {
+            },
+            res => {
+                let data = '';
+                res.on('data', chunk => (data += chunk));
+                res.on('end', () => {
+                    try {
+                        const result = JSON.parse(data);
+                        resolve(result);
+                    } catch (e) {
+                        resolve({ error: data });
+                    }
+                });
+            }
+        );
+        req.on('error', err => {
             reject(err);
         });
         req.write(body);

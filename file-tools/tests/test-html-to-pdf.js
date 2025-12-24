@@ -15,19 +15,19 @@ function htmlToPdfRequest(html) {
                 'Content-Length': Buffer.byteLength(data)
             }
         };
-        const req = http.request(options, (res) => {
+        const req = http.request(options, res => {
             const chunks = [];
-            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('data', chunk => chunks.push(chunk));
             res.on('end', () => {
                 const buffer = Buffer.concat(chunks);
-                resolve({ 
-                    statusCode: res.statusCode, 
+                resolve({
+                    statusCode: res.statusCode,
                     buffer,
                     headers: res.headers
                 });
             });
         });
-        req.on('error', (e) => reject(e));
+        req.on('error', e => reject(e));
         req.write(data);
         req.end();
     });
