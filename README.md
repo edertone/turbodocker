@@ -4,15 +4,9 @@ This repository contains different general purpose docker images
 
 Check readme file inside each docker image for more information on usage
 
-## how to publish a docker image to docker hub
+## Images
 
-- Open a cmd at the root of the docker image and run:
-
-```
-docker login
-docker build -t edertone/imagename:latest .
-docker push edertone/imagename:latest
-```
+- [file-tools](./file-tools/README.md) - General purpose utilities to work with several file formats like PDF, ZIP, etc..
 
 ### Donate
 	
