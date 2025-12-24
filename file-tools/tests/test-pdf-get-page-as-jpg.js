@@ -130,6 +130,17 @@ describe('PDF Get Page as JPG API', function () {
         fs.writeFileSync(path.join(OUT_DIR, 'thumbnail-250x350.jpg'), result.buffer);
     });
 
+    it('should return a JPEG thumbnail with both width and height but not proportional', async function () {
+        const result = await sendPdfToJpgEndpoint({ width: 250, height: 150 });
+        assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
+        assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
+        assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');
+        // Check JPEG header
+        assert.strictEqual(result.buffer[0], 0xff, 'JPEG should start with 0xFF');
+        assert.strictEqual(result.buffer[1], 0xd8, 'JPEG should start with 0xD8');
+        fs.writeFileSync(path.join(OUT_DIR, 'thumbnail-250x150.jpg'), result.buffer);
+    });
+
     it('should return a high quality JPEG thumbnail', async function () {
         const result = await sendPdfToJpgEndpoint({ width: 300, jpegQuality: 95 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
