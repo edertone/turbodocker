@@ -18,10 +18,14 @@ npm run test
 
 ## Publish to docker hub
 
-Open a cmd at the file-tools docker folder and run:
+- Make sure docker is running
+- Open a **power shell** terminal at the file-tools docker folder
+- Run all this code at once:
 
 ```
-docker login
-docker build -t edertone/file-tools:latest .
-docker push edertone/file-tools:latest
+docker login; `
+$VERSION = (Get-Content VERSION).Trim(); `
+docker build -t edertone/file-tools:$VERSION .; `
+docker tag edertone/file-tools:$VERSION; `
+docker push edertone/file-tools:$VERSION
 ```
