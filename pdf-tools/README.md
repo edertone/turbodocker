@@ -2,15 +2,21 @@
 
 This Dockerized microservice provides general-purpose PDF manipulation tools via HTTP API endpoints on port 5001.
 
+All endpoints accept POST variables as either `multipart/form-data` (for file uploads) or `application/json` (for string or base64-encoded data). For file fields (such as `pdf`), use a file upload with `multipart/form-data` or provide a base64-encoded string in JSON. String and numeric fields can be sent as form fields or JSON properties. See each endpoint for required and optional parameters.
+
 ---
 
-### Build & Run Locally
+## API Documentation
+
+- [PDF API Endpoints](./docs/pdf-api.md)
+
+## Build & Run Locally
 
 ```
 docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
 ```
 
-### Run tests
+## Run tests
 
 Make sure the container is running on your local machine, and packages are installed (npm ci):
 
@@ -18,7 +24,7 @@ Make sure the container is running on your local machine, and packages are insta
 npm run test
 ```
 
-### Publish to docker hub
+## Publish to docker hub
 
 Open a cmd at the pdf-tools docker image folder and run:
 
@@ -26,166 +32,6 @@ Open a cmd at the pdf-tools docker image folder and run:
 docker login
 docker build -t edertone/pdf-tools:latest .
 docker push edertone/pdf-tools:latest
-```
-
----
-
-## API Documentation
-
-### Request Format
-
-All endpoints accept POST variables as either `multipart/form-data` (for file uploads) or `application/json` (for string or base64-encoded data). For file fields (such as `pdf`), use a file upload with `multipart/form-data` or provide a base64-encoded string in JSON. String and numeric fields can be sent as form fields or JSON properties. See each endpoint for required and optional parameters.
-
-### 1. PDF Validation
-
-Verify that a provided file is a valid PDF document
-
-**Endpoint:** `/pdf-is-valid`
-
-**Method:** `POST`
-
-**Content-Type:** `multipart/form-data`
-
-**Parameters:**
-
-- `pdf` (file): The PDF file data
-
-**Response:**
-
-```json
-{
-    "valid": true
-}
-```
-
-**Example (Node.js):**
-
-```javascript
-const formData = new FormData();
-formData.append('pdf', pdfBuffer);
-
-const response = await fetch('http://localhost:5001/pdf-is-valid', {
-    method: 'POST',
-    body: formData
-});
-const result = await response.json();
-console.log('Is valid PDF:', result.valid);
-```
-
----
-
-### 2. PDF Page Count
-
-Count the number of pages on a provided PDF file
-
-**Endpoint:** `/pdf-count-pages`
-
-**Method:** `POST`
-
-**Content-Type:** `multipart/form-data`
-
-**Parameters:**
-
-- `pdf` (file): The PDF file data
-
-**Response:**
-
-```json
-{
-    "pages": 5
-}
-```
-
-**Example using cURL**:
-
-```sh
-curl -X POST -F "pdf=@document.pdf" http://localhost:5001/pdf-count-pages
-```
-
----
-
-### 3. PDF Page to JPEG
-
-Convert a specific PDF page to a JPEG image with custom quality and resolution.
-
-**Endpoint:** `/pdf-get-page-as-jpg`
-
-**Method:** `POST`
-
-**Content-Type:** `multipart/form-data` or `application/json`
-
-**Parameters:**
-
-- `pdf` (required - file or base64 string): The PDF file data
-- `page` (required - integer): Page number (0 = first page)
-- `width` (optional - integer): Desired width in pixels (1-10000)
-- `height` (optional - integer): Desired height in pixels (1-10000)
-- `jpegQuality` (optional - integer): JPEG quality (1-100, default: 90)
-
-At least one of `width` or `height` must be provided. If only one is given, the other is calculated to preserve aspect ratio.
-
-**Response:**
-
-- JPEG image as binary data (`Content-Type: image/jpeg`)
-
-**Example (Node.js):**
-
-```javascript
-const formData = new FormData();
-formData.append('pdf', pdfBuffer);
-formData.append('page', '0');
-formData.append('width', '800');
-formData.append('jpegQuality', '95');
-
-const response = await fetch('http://localhost:5001/pdf-get-page-as-jpg', {
-    method: 'POST',
-    body: formData
-});
-const imageBuffer = await response.arrayBuffer();
-// Save or process the JPEG image
-```
-
----
-
-### 4. HTML to PDF
-
-Convert HTML content to a pixel-perfect PDF using the Chromium engine.
-
-**Endpoints:**
-
-- `/html-to-pdf-binary`: Returns the PDF as a binary file (recommended)
-- `/html-to-pdf-base64`: Returns the PDF as a base64 string
-
-**Method:** `POST`
-
-**Content-Type:** `application/json`
-
-**Parameters:**
-
-- `html` (string): The HTML content to convert
-
-**Response:**
-
-- `/html-to-pdf-binary`: PDF as binary (`Content-Type: application/pdf`)
-- `/html-to-pdf-base64`: PDF as base64 string (`Content-Type: application/json`)
-
-**Example (PHP, base64 endpoint):**
-
-```php
-$html = '<html><body><h1>Hello, PDF!</h1><p>This is a test.</p></body></html>';
-$ch = curl_init('http://localhost:5001/html-to-pdf-base64');
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['html' => $html]));
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-$pdfBase64 = curl_exec($ch);
-if ($pdfBase64 === false) {
-    $errorMsg = curl_error($ch);
-    // Handle error
-}
-curl_close($ch);
-// $pdfBase64 now contains the base64-encoded PDF string
-return $pdfBase64;
 ```
 
 ---
