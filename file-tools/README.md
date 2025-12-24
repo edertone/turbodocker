@@ -13,7 +13,7 @@ All endpoints accept POST variables as either `multipart/form-data` (for file up
 ## Build & Run Locally
 
 ```
-docker build -t pdf-tools . && docker run -p 5001:5001 pdf-tools
+docker build -t file-tools . && docker run -p 5001:5001 file-tools
 ```
 
 ## Run tests
@@ -26,12 +26,12 @@ npm run test
 
 ## Publish to docker hub
 
-Open a cmd at the pdf-tools docker image folder and run:
+Open a cmd at the file-tools docker image folder and run:
 
 ```
 docker login
-docker build -t edertone/pdf-tools:latest .
-docker push edertone/pdf-tools:latest
+docker build -t edertone/file-tools:latest .
+docker push edertone/file-tools:latest
 ```
 
 ---
