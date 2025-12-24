@@ -1,106 +1,80 @@
 const http = require('node:http');
-const {
-    rejectNonPost,
-    countPdfPages,
-    convertHtmlToPdf,
-    getPostVariables,
-    isValidPdf,
-    getPdfPageAsJpg
-} = require('./server-helper.js');
+const helper = require('./server-helper.js');
 
-// Global constants
 const PORT = 5001;
-const ENDPOINT_PDF_IS_VALID = '/pdf-is-valid';
-const ENDPOINT_PDF_COUNT_PAGES = '/pdf-count-pages';
-const ENDPOINT_PDF_GET_PAGE_AS_JPG = '/pdf-get-page-as-jpg';
-const ENDPOINT_HTML_TO_PDF_BINARY = '/html-to-pdf-binary';
-const ENDPOINT_HTML_TO_PDF_BASE64 = '/html-to-pdf-base64';
 
-// Create a basic HTTP server to handle requests
 const server = http.createServer(async (req, res) => {
-    switch (req.url) {
-        case ENDPOINT_PDF_IS_VALID:
-            if (rejectNonPost(req, res)) return;
-            try {
-                const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
-                const pdfBuffer = Buffer.from(pdfData, 'binary');
-                const isValid = await isValidPdf(pdfBuffer);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ valid: isValid }));
-            } catch (error) {
-                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
-                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: error.message || 'Failed to validate PDF.' }));
+    
+    // Helper to send JSON response
+    const sendJson = (code, data) => {
+        res.writeHead(code, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+    };
+
+    // Helper to handle errors
+    const handleError = (err) => {
+        console.error(err); // Log for debugging
+        const isClientErr = err.message && err.message.startsWith("Missing POST variable");
+        sendJson(isClientErr ? 400 : 500, { error: err.message || 'Processing failed' });
+    };
+
+    try {
+        switch (req.url) {
+            case '/pdf-is-valid': {
+                if (helper.rejectNonPost(req, res)) return;
+                const { pdf } = await helper.getPostVariables(req, ['pdf']);
+                const isValid = await helper.isValidPdf(pdf);
+                sendJson(200, { valid: isValid });
+                break;
             }
-            break;
-        case ENDPOINT_PDF_COUNT_PAGES:
-            if (rejectNonPost(req, res)) return;
 
-            try {
-                const { pdf: pdfData } = await getPostVariables(req, ['pdf']);
-                const pdfBuffer = Buffer.from(pdfData, 'binary');
-                const pageCount = await countPdfPages(pdfBuffer);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ pages: pageCount }));
-            } catch (error) {
-                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
-                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: error.message || 'Failed to count PDF pages.' }));
+            case '/pdf-count-pages': {
+                if (helper.rejectNonPost(req, res)) return;
+                const { pdf } = await helper.getPostVariables(req, ['pdf']);
+                const count = await helper.countPdfPages(pdf);
+                sendJson(200, { pages: count });
+                break;
             }
-            break;
 
-        case ENDPOINT_PDF_GET_PAGE_AS_JPG:
-            if (rejectNonPost(req, res)) return;
+            case '/pdf-get-page-as-jpg': {
+                if (helper.rejectNonPost(req, res)) return;
+                const vars = await helper.getPostVariables(req, ['pdf', 'page'], ['width', 'height', 'jpegQuality']);
+                const pageIndex = parseInt(vars.page, 10);
+                const options = {
+                    width: vars.width ? parseInt(vars.width, 10) : undefined,
+                    height: vars.height ? parseInt(vars.height, 10) : undefined,
+                    jpegQuality: vars.jpegQuality ? parseInt(vars.jpegQuality, 10) : undefined
+                };
 
-            try {
-                const postData = await getPostVariables(req, ['pdf', 'page'], ['width', 'height', 'jpegQuality']);
-                const pdfBuffer = Buffer.from(postData.pdf, 'binary');
-                const pageIndex = parseInt(postData.page, 10);
-                const options = {};
-                if (postData.width !== undefined) options.width = parseInt(postData.width, 10);
-                if (postData.height !== undefined) options.height = parseInt(postData.height, 10);
-                if (postData.jpegQuality !== undefined) options.jpegQuality = parseInt(postData.jpegQuality, 10);
-
-                const imageBuffer = await getPdfPageAsJpg(pdfBuffer, pageIndex, options);
-
+                const imgBuffer = await helper.getPdfPageAsJpg(vars.pdf, pageIndex, options);
                 res.writeHead(200, { 'Content-Type': 'image/jpeg' });
-                return res.end(imageBuffer);
-            } catch (error) {
-                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
-                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: error.message || 'Failed to convert PDF page to JPEG.' }));
+                res.end(imgBuffer);
+                break;
             }
-            break;
 
-        case ENDPOINT_HTML_TO_PDF_BINARY:
-        case ENDPOINT_HTML_TO_PDF_BASE64:
-            if (rejectNonPost(req, res)) return;
+            case '/html-to-pdf-binary':
+            case '/html-to-pdf-base64': {
+                if (helper.rejectNonPost(req, res)) return;
+                const { html } = await helper.getPostVariables(req, ['html']);
+                const pdfBuffer = await helper.convertHtmlToPdf(html);
 
-            try {
-                const { html } = await getPostVariables(req, ['html']);
-                const pdfBuffer = await convertHtmlToPdf(html);
-
-                if (req.url === ENDPOINT_HTML_TO_PDF_BASE64) {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(pdfBuffer.toString('base64'));
+                if (req.url === '/html-to-pdf-base64') {
+                    sendJson(200, pdfBuffer.toString('base64'));
                 } else {
                     res.writeHead(200, { 'Content-Type': 'application/pdf' });
                     res.end(pdfBuffer);
                 }
-            } catch (error) {
-                const isMissingVar = error.message && error.message.startsWith("Missing POST variable'");
-                res.writeHead(isMissingVar ? 400 : 500, { 'Content-Type': 'application/json' });
-                return res.end(JSON.stringify({ error: error.message || 'Failed to convert HTML to PDF.' }));
+                break;
             }
-            break;
 
-        default:
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid endpoint: ' + req.url }));
-            break;
+            default:
+                sendJson(404, { error: 'Invalid endpoint: ' + req.url });
+        }
+    } catch (error) {
+        handleError(error);
     }
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on http://0.0.0.0:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
 });

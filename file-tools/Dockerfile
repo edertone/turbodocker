@@ -1,5 +1,8 @@
 FROM alpine:3.22
 
+# Tell node we are in production mode
+ENV NODE_ENV=production
+
 # Install system dependencies including Node.js and Chromium
 RUN apk add --no-cache \
     chromium \
