@@ -1,4 +1,5 @@
 FROM alpine:3.22
+
 # Install system dependencies including Node.js and Chromium
 RUN apk add --no-cache \
     chromium \

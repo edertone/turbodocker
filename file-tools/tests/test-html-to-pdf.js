@@ -1,6 +1,8 @@
 // tests/test-html-to-pdf.test.js
 const http = require('http');
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
 function htmlToPdfRequest(html) {
     return new Promise((resolve, reject) => {
@@ -41,6 +43,14 @@ describe('HTML to PDF API', function () {
         const result = await htmlToPdfRequest(html);
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.buffer.length > 1000, 'PDF buffer should not be empty');
+
+        // Save PDF to tests-out folder for manual inspection
+        const outputDir = path.join(__dirname, '..', 'tests-out');
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+        const outputPath = path.join(outputDir, 'output.pdf');
+        fs.writeFileSync(outputPath, result.buffer);
     });
 
     it('should return a valid PDF file (header check)', async function () {

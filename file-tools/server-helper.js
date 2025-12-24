@@ -4,63 +4,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
-// Global variables to cache executable paths
-let _ghostscriptExecutable = null;
-let _chromeExecutable = null;
-
-/**
- * Finds the Chromium-based browser executable available on the system.
- * Checks for common executable names and caches the result.
- * @returns {string} The name of the Chromium executable found.
- * @throws {Error} If no Chromium executable is found on the system.
- */
-function findChromeExecutable() {
-    // Return cached result if available
-    if (_chromeExecutable !== null) {
-        return _chromeExecutable;
-    }
-
-    const candidates = ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome'];
-
-    for (const candidate of candidates) {
-        try {
-            execSync(`command -v ${candidate}`);
-            _chromeExecutable = candidate;
-            return candidate;
-        } catch {
-            continue;
-        }
-    }
-
-    throw new Error('Could not find a chromium executable. Please install chromium or google-chrome.');
-}
-
-/**
- * Finds the Ghostscript executable available on the system.
- * Checks for common executable names and caches the result.
- * @returns {string} The name of the Ghostscript executable found.
- * @throws {Error} If no Ghostscript executable is found on the system.
- */
-function findGhostscriptExecutable() {
-    // Return cached result if available
-    if (_ghostscriptExecutable !== null) {
-        return _ghostscriptExecutable;
-    }
-
-    const candidates = ['gs', 'ghostscript'];
-
-    for (const candidate of candidates) {
-        try {
-            execSync(`command -v ${candidate}`, { stdio: 'ignore' });
-            _ghostscriptExecutable = candidate;
-            return candidate;
-        } catch {
-            continue;
-        }
-    }
-
-    throw new Error('Could not find a ghostscript executable. Please install ghostscript.');
-}
+// Global executable paths
+const _pdfinfoExecutable = 'pdfinfo';
+const _ghostscriptExecutable = 'gs';
+const _chromeExecutable = 'chromium';
 
 /**
  * Rejects HTTP requests that are not POST, sending a 405 response.
@@ -173,7 +120,7 @@ async function isValidPdf(pdfBuffer) {
     // Use pdfinfo with stdin to validate the PDF
     try {
         await new Promise((resolve, reject) => {
-            const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
+            const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
                 if (error) {
                     return reject(error);
                 }
@@ -199,7 +146,7 @@ async function isValidPdf(pdfBuffer) {
 async function countPdfPages(pdfBuffer) {
     try {
         const output = await new Promise((resolve, reject) => {
-            const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
+            const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
                 if (error) {
                     return reject(new Error(`Could not determine page count: ${stderr}`));
                 }
@@ -263,7 +210,7 @@ async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
     if (!width || !height) {
         // Use pdfinfo to get the original page size (in points)
         const pdfinfoOutput = await new Promise((resolve, reject) => {
-            const child = execFile('pdfinfo', ['-'], (error, stdout, stderr) => {
+            const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
                 if (error) return reject(new Error(`pdfinfo failed: ${stderr || error.message}`));
                 resolve(stdout);
             });
@@ -288,7 +235,6 @@ async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
         }
     }
 
-    const gsExecutable = findGhostscriptExecutable();
     // Build ghostscript arguments for image generation
     const pageNum = pageIndex + 1; // Ghostscript uses 1-based page numbers
     const args = [
@@ -313,7 +259,7 @@ async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
     try {
         const imageBuffer = await new Promise((resolve, reject) => {
             const child = execFile(
-                gsExecutable,
+                _ghostscriptExecutable,
                 args,
                 {
                     encoding: null, // Get binary output
@@ -349,7 +295,6 @@ async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
  * @throws {Error} If PDF generation fails.
  */
 async function convertHtmlToPdf(html) {
-    const chromeExecutable = findChromeExecutable();
     const uniqueId = crypto.randomUUID();
     const tempDir = os.tmpdir();
     const inputHtmlPath = path.join(tempDir, `${uniqueId}.html`);
@@ -375,7 +320,7 @@ async function convertHtmlToPdf(html) {
         ];
 
         await new Promise((resolve, reject) => {
-            execFile(chromeExecutable, args, (error, stdout, stderr) => {
+            execFile(_chromeExecutable, args, (error, stdout, stderr) => {
                 if (error) {
                     return reject(new Error(`PDF generation failed: ${stderr}`));
                 }
