@@ -2,16 +2,17 @@
 
 ## Build & Run Locally
 
-Open a cmd at the file-tools/docker folder and run:
+Open a cmd at the file-tools folder and run:
 
-```batch
-docker build -t file-tools .
-docker run -p 5001:5001 file-tools
+```
+npm run rebuild-start
 ```
 
 ## Run tests
 
-Make sure the container is running on your local machine, and packages are installed (npm ci):
+- Make sure file-tools packages are installed (npm ci)
+- Make sure the container is running on your local machine (npm run rebuild-start)
+- Open another cmd at file-tools folder and run:
 
 ```
 npm run test
