@@ -28,6 +28,5 @@ npm run test
 docker login; `
 $VERSION = (Get-Content VERSION).Trim(); `
 docker build -t edertone/file-tools:$VERSION .; `
-docker tag edertone/file-tools:$VERSION; `
 docker push edertone/file-tools:$VERSION
 ```
