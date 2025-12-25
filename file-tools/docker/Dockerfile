@@ -44,7 +44,7 @@ RUN apk add --no-cache \
     nodejs \
     ghostscript \
     poppler-utils \
-    ttf-dejavu \
+    ttf-freefont \
     font-noto-cjk \
     font-noto-emoji \
     && adduser -D converter
