@@ -1,0 +1,84 @@
+const { serve } = require('@hono/node-server');
+const { Hono } = require('hono');
+const helper = require('./server-helper.js');
+
+const app = new Hono();
+const PORT = 5001;
+
+// Error handling middleware
+app.onError((err, c) => {
+    console.error(err);
+    const status = err.message.startsWith('Missing') || err.message.startsWith('Invalid') ? 400 : 500;
+    return c.json({ error: err.message || 'Processing failed' }, status);
+});
+
+// PDF Validation
+app.post('/pdf-is-valid', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const pdfBuffer = await helper.getFileAsBuffer(body, 'pdf');
+
+    const isValid = await helper.isValidPdf(pdfBuffer);
+    return c.json({ valid: isValid });
+});
+
+// Count Pages
+app.post('/pdf-count-pages', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const pdfBuffer = await helper.getFileAsBuffer(body, 'pdf');
+
+    const count = await helper.countPdfPages(pdfBuffer);
+    return c.json({ pages: count });
+});
+
+// PDF Page to JPG
+app.post('/pdf-get-page-as-jpg', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const pdfBuffer = await helper.getFileAsBuffer(body, 'pdf');
+
+    // Parse inputs
+    const page = parseInt(body['page'], 10);
+    if (isNaN(page)) throw new Error("Missing POST variable 'page'");
+
+    const options = {
+        width: body['width'] ? parseInt(body['width'], 10) : undefined,
+        height: body['height'] ? parseInt(body['height'], 10) : undefined,
+        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 90
+    };
+
+    const imgBuffer = await helper.getPdfPageAsJpg(pdfBuffer, page, options);
+
+    return c.body(imgBuffer, 200, {
+        'Content-Type': 'image/jpeg'
+    });
+});
+
+// HTML to PDF
+const handleHtmlToPdf = async (c, returnBase64) => {
+    const body = await helper.parseBodyVariables(c);
+    const html = body['html'];
+
+    if (!html) throw new Error("Missing POST variable 'html'");
+
+    // Handle case where HTML might be uploaded as a file object vs simple string
+    const htmlString = typeof html === 'object' && html.text ? await html.text() : String(html);
+
+    const pdfBuffer = await helper.convertHtmlToPdf(htmlString);
+
+    if (returnBase64) {
+        return c.json(pdfBuffer.toString('base64'));
+    } else {
+        return c.body(pdfBuffer, 200, {
+            'Content-Type': 'application/pdf'
+        });
+    }
+};
+
+app.post('/html-to-pdf-binary', c => handleHtmlToPdf(c, false));
+app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
+
+// Start Server
+console.log(`Server running on http://0.0.0.0:${PORT}`);
+serve({
+    fetch: app.fetch,
+    port: PORT
+});

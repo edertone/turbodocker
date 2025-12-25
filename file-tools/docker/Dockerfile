@@ -3,12 +3,17 @@ FROM alpine:3.22
 # Tell node we are in production mode
 ENV NODE_ENV=production
 
-# Install system dependencies including Node.js and Chromium
+# Install system dependencies
+# chromium: for html-to-pdf
+# ghostscript: for pdf-to-jpg
+# poppler-utils: for pdfinfo (validation/counting)
+# nodejs & npm: for the server
 RUN apk add --no-cache \
     chromium \
     nss \
     ca-certificates \
     nodejs \
+    npm \
     ghostscript \
     poppler-utils \
     font-noto \
@@ -17,17 +22,20 @@ RUN apk add --no-cache \
     font-noto-extra \
     && adduser -D converter
 
-# Set working directory
 WORKDIR /app
 
+# Copy dependency definitions first (better caching)
+COPY --chown=converter:converter package.json .
+
+# Install Node dependencies
+RUN npm install --omit=dev
+
 # Copy application code
-COPY --chown=converter:converter *.js .
+COPY --chown=converter:converter server.js server-helper.js ./
 
 # Switch to non-root user
 USER converter
 
-# Expose the port the app runs on
 EXPOSE 5001
 
-# Command to run the application
 CMD ["node", "server.js"]

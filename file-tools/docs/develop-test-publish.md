@@ -2,10 +2,11 @@
 
 ## Build & Run Locally
 
-Open a cmd at the file-tools docker folder and run:
+Open a cmd at the file-tools/docker folder and run:
 
-```
-docker build -t file-tools . && docker run -p 5001:5001 file-tools
+```batch
+docker build -t file-tools .
+docker run -p 5001:5001 file-tools
 ```
 
 ## Run tests
@@ -19,10 +20,10 @@ npm run test
 ## Publish to docker hub
 
 - Make sure docker is running
-- Open a **power shell** terminal at the file-tools docker folder
+- Open a **power shell** terminal at the file-tools/docker folder
 - Run all this code at once:
 
-```
+```powershell
 docker login; `
 $VERSION = (Get-Content VERSION).Trim(); `
 docker build -t edertone/file-tools:$VERSION .; `
