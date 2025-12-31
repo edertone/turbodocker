@@ -4,7 +4,7 @@
 
 ### Image to JPEG
 
-Convert any image to JPEG with a specified quality and optionally a background color to set for transparent original input
+Convert any image to JPEG with a specified quality and an optional background color for transparent areas in the original image
 
 **Endpoint:** `/image-to-jpg`
 
