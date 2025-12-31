@@ -18,7 +18,7 @@ app.post('/image-to-jpg', async c => {
     const imageBuffer = await helper.getFileAsBuffer(body, 'image');
 
     const options = {
-        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 90,
+        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 75,
         transparentColor: body['transparentColor'] || '#FFFFFF'
     };
 
@@ -59,7 +59,7 @@ app.post('/pdf-get-page-as-jpg', async c => {
     const options = {
         width: body['width'] ? parseInt(body['width'], 10) : undefined,
         height: body['height'] ? parseInt(body['height'], 10) : undefined,
-        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 90
+        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 75
     };
 
     const imgBuffer = await helper.getPdfPageAsJpg(pdfBuffer, page, options);

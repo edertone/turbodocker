@@ -13,7 +13,7 @@ function ensureOutDir() {
     }
 }
 
-function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 90 }) {
+function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 75 }) {
     return new Promise((resolve, reject) => {
         if (!fs.existsSync(PDF_FILE_PATH)) {
             return reject(new Error('sample30.pdf not found in resources directory'));
@@ -71,7 +71,7 @@ describe('PDF Get Page as JPG API', function () {
     before(ensureOutDir);
 
     it('should return a JPEG image for the first page with width', async function () {
-        const result = await sendPdfToJpgEndpoint({ page: 0, width: 300, jpegQuality: 90 });
+        const result = await sendPdfToJpgEndpoint({ page: 0, width: 300, jpegQuality: 75 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');

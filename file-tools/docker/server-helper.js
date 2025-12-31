@@ -96,13 +96,13 @@ async function countPdfPages(pdfBuffer) {
  * @param {Object} options - Options for image generation.
  * @param {number} [options.width] - Desired width in pixels.
  * @param {number} [options.height] - Desired height in pixels.
- * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
+ * @param {number} [options.jpegQuality=75] - JPEG quality (1-100).
  *
  * @returns {Promise<Buffer>} The JPEG image buffer.
  * @throws {Error} If conversion fails or parameters are invalid.
  */
 async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
-    const { width, height, jpegQuality = 90 } = options;
+    const { width, height, jpegQuality = 75 } = options;
 
     // Validate parameters
     if (width !== undefined && (!Number.isInteger(width) || width < 1 || width > 10000)) {
@@ -240,12 +240,12 @@ async function convertHtmlToPdf(html) {
  * Converts an image buffer to a JPEG buffer using ImageMagick.
  * @param {Buffer} imageBuffer - The image file buffer.
  * @param {Object} options - Options for image generation.
- * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
+ * @param {number} [options.jpegQuality=75] - JPEG quality (1-100).
  * @param {string} [options.transparentColor='#FFFFFF'] - Background color for transparent images.
  * @returns {Promise<Buffer>} The JPEG image buffer.
  */
 async function convertImageToJpg(imageBuffer, options = {}) {
-    const { jpegQuality = 90, transparentColor = '#FFFFFF' } = options;
+    const { jpegQuality = 75, transparentColor = '#FFFFFF' } = options;
 
     if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
         throw new Error('JPEG quality must be an integer between 1 and 100');

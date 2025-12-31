@@ -86,7 +86,7 @@ Convert a specific PDF page to a JPEG image with custom quality and resolution.
 - `page` (required - integer): Page number (0 = first page)
 - `width` (optional - integer): Desired width in pixels (1-10000)
 - `height` (optional - integer): Desired height in pixels (1-10000)
-- `jpegQuality` (optional - integer): JPEG quality (1-100, default: 90)
+- `jpegQuality` (optional - integer): JPEG quality (1-100, default: 75)
 
 At least one of `width` or `height` must be provided. If only one is given, the other is calculated to preserve aspect ratio.
 
