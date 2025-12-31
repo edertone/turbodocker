@@ -13,7 +13,7 @@ const TEST_FILES = [
 
 function isValidPdfRequest(fileName) {
     return new Promise((resolve, reject) => {
-        const filePath = path.join(__dirname, 'resources', fileName);
+        const filePath = path.join(__dirname, 'resources', 'pdf-samples', fileName);
         if (!fs.existsSync(filePath)) {
             return reject(new Error(`File not found: ${fileName}`));
         }

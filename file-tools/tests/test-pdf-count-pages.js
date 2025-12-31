@@ -76,7 +76,7 @@ describe('PDF Count Pages API', function () {
     this.timeout(10000); // Allow up to 10s per test
     TEST_CASES.forEach(({ file, expected }) => {
         it(`should return ${expected} pages for ${file}`, async function () {
-            const pdfPath = path.join(__dirname, 'resources', file);
+            const pdfPath = path.join(__dirname, 'resources', 'pdf-samples', file);
             const result = await countPagesForFile(pdfPath, expected);
             assert.strictEqual(result.success, true, result.error || 'Unknown error');
             assert.strictEqual(result.actual, expected, result.error || 'Page count mismatch');
