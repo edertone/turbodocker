@@ -10,6 +10,8 @@ All endpoints accept POST variables as either `multipart/form-data` (for file up
 
 - [PDF API Endpoints](./docs/pdf-api.md)
 
+- [Cache API Endpoints](./docs/cache-api.md)
+
 ## Development documentation
 
 - [Development, testing and deployment documentation](./docs/develop-test-publish.md)

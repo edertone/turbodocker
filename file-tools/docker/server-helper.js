@@ -272,7 +272,7 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         ];
 
         await new Promise((resolve, reject) => {
-            execFile('convert', args, (error, stdout, stderr) => {
+            execFile('magick', args, (error, stdout, stderr) => {
                 if (error) return reject(new Error(`ImageMagick conversion failed: ${stderr || error.message}`));
                 resolve();
             });

@@ -51,7 +51,9 @@ RUN apk add --no-cache \
     ttf-freefont \
     font-noto-cjk \
     font-noto-emoji \
-    && adduser -D converter
+    && adduser -D converter \
+    && mkdir -p /redis-data \
+    && chown converter:converter /redis-data
 
 # Copy node_modules from the builder stage
 COPY --from=builder --chown=converter:converter /app/node_modules ./node_modules
@@ -61,6 +63,8 @@ COPY --chown=converter:converter package.json server.js server-helper.js start.s
 
 # Switch to non-root user
 USER converter
+
+VOLUME /redis-data
 
 EXPOSE 5001
 
