@@ -9,8 +9,10 @@ REDIS_CMD="redis-server --daemonize no"
 MAX_MEMORY=${REDIS_MAX_MEMORY:-500mb}
 REDIS_CMD="$REDIS_CMD --maxmemory $MAX_MEMORY --maxmemory-policy allkeys-lru"
 
-# Configure Redis data directory for persistence
-if [ -n "$REDIS_DATA_DIR" ]; then
+# Configure Redis persistence
+if [ "$REDIS_PERSISTENCE_ENABLED" = "true" ]; then
+    # Persistence is enabled, using the /redis-data directory.
+    REDIS_DATA_DIR="/redis-data"
     echo "Redis persistence is enabled. Data will be saved in $REDIS_DATA_DIR"
     REDIS_CMD="$REDIS_CMD --save 900 1 --dir $REDIS_DATA_DIR --dbfilename dump.rdb"
 else
