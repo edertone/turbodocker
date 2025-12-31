@@ -2,7 +2,45 @@
 
 ## PDF API endpoints documentation
 
-### 1. PDF Validation
+### Image to JPEG
+
+Convert an image to a JPEG with a specified quality and optionally a background color to set for transparent input
+
+**Endpoint:** `/image-to-jpg`
+
+**Method:** `POST`
+
+**Content-Type:** `multipart/form-data`
+
+**Parameters:**
+
+- `image` (file): The image file to convert.
+- `jpegQuality` (optional - integer): The quality of the output JPEG (1-100, default: 75).
+- `transparentColor` (optional - string): The hex color to use for transparent areas (e.g., '#FFFFFF', default is white).
+
+**Response:**
+
+- JPEG image as binary data (`Content-Type: image/jpeg`)
+
+**Example (Node.js):**
+
+```javascript
+const formData = new FormData();
+formData.append('image', imageBuffer);
+formData.append('jpegQuality', '90');
+formData.append('transparentColor', '#000000');
+
+const response = await fetch('http://localhost:5001/image-to-jpg', {
+    method: 'POST',
+    body: formData
+});
+const imageBlob = await response.blob();
+// ... handle image blob
+```
+
+---
+
+### PDF Validation
 
 Verify that a provided file is a valid PDF document
 
@@ -40,7 +78,7 @@ console.log('Is valid PDF:', result.valid);
 
 ---
 
-### 2. PDF Page Count
+### PDF Page Count
 
 Count the number of pages on a provided PDF file
 
@@ -70,7 +108,7 @@ curl -X POST -F "pdf=@document.pdf" http://localhost:5001/pdf-count-pages
 
 ---
 
-### 3. PDF Page to JPEG
+### PDF Page to JPEG
 
 Convert a specific PDF page to a JPEG image with custom quality and resolution.
 
@@ -113,7 +151,7 @@ const imageBuffer = await response.arrayBuffer();
 
 ---
 
-### 4. HTML to PDF
+### HTML to PDF
 
 Convert HTML content to a pixel-perfect PDF using the Chromium engine.
 
@@ -124,34 +162,30 @@ Convert HTML content to a pixel-perfect PDF using the Chromium engine.
 
 **Method:** `POST`
 
-**Content-Type:** `application/json`
+**Content-Type:** `multipart/form-data` or `application/json`
 
 **Parameters:**
 
-- `html` (string): The HTML content to convert
+- `html` (required - string or file): The HTML content to convert.
 
-**Response:**
+**Response (`/html-to-pdf-binary`):**
 
-- `/html-to-pdf-binary`: PDF as binary (`Content-Type: application/pdf`)
-- `/html-to-pdf-base64`: PDF as base64 string (`Content-Type: application/json`)
+- PDF document as binary data (`Content-Type: application/pdf`)
 
-**Example (PHP, base64 endpoint):**
+**Response (`/html-to-pdf-base64`):**
 
-```php
-$html = '<html><body><h1>Hello, PDF!</h1><p>This is a test.</p></body></html>';
-$ch = curl_init('http://localhost:5001/html-to-pdf-base64');
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['html' => $html]));
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-$pdfBase64 = curl_exec($ch);
-if ($pdfBase64 === false) {
-    $errorMsg = curl_error($ch);
-    // Handle error
-}
-curl_close($ch);
-// $pdfBase64 now contains the base64-encoded PDF string
-return $pdfBase64;
+```json
+"JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c..."
 ```
 
----
+**Example (Node.js for binary):**
+
+```javascript
+const response = await fetch('http://localhost:5001/html-to-pdf-binary', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html: '<h1>Hello World</h1>' })
+});
+const pdfBuffer = await response.arrayBuffer();
+// ... save or process pdfBuffer
+```
