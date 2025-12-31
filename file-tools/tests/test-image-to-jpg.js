@@ -20,11 +20,14 @@ function ensureOutDir() {
  * @param {number} [jpegQuality] - Optional JPEG quality setting.
  * @returns {Promise<Response>} - The fetch API Response object.
  */
-async function convertImage(imageBuffer, originalFilename, jpegQuality) {
+async function convertImage(imageBuffer, originalFilename, jpegQuality, transparentColor) {
     const formData = new FormData();
     formData.append('image', new Blob([imageBuffer]), originalFilename);
     if (jpegQuality !== undefined) {
         formData.append('jpegQuality', String(jpegQuality));
+    }
+    if (transparentColor !== undefined) {
+        formData.append('transparentColor', transparentColor);
     }
 
     return fetch(`${API_URL}/image-to-jpg`, {
@@ -37,7 +40,7 @@ describe('POST /image-to-jpg', () => {
     const imageDir = path.join(__dirname, 'resources', 'image-to-jpg');
     before(ensureOutDir);
 
-    it('should convert a PNG image to JPG', async () => {
+    it('should convert a PNG image with transparent background to JPG with white background', async () => {
         const imagePath = path.join(imageDir, 'sample-transparent.png');
         const imageBuffer = await fs.readFile(imagePath);
 
@@ -49,7 +52,23 @@ describe('POST /image-to-jpg', () => {
         assert(responseBuffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
-        const outputPath = path.join(OUT_DIR, 'sample-transparent-png.jpg');
+        const outputPath = path.join(OUT_DIR, 'sample-transparent-png-white-bg.jpg');
+        await fs.writeFile(outputPath, responseBuffer);
+    });
+
+    it('should convert a PNG image with transparent background to JPG with black background', async () => {
+        const imagePath = path.join(imageDir, 'sample-transparent.png');
+        const imageBuffer = await fs.readFile(imagePath);
+
+        const response = await convertImage(imageBuffer, 'sample-transparent.png', undefined, '#000000');
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
+
+        const responseBuffer = Buffer.from(await response.arrayBuffer());
+        assert(responseBuffer.length > 0, 'Response buffer should not be empty');
+
+        // Save the converted image
+        const outputPath = path.join(OUT_DIR, 'sample-transparent-png-black-bg.jpg');
         await fs.writeFile(outputPath, responseBuffer);
     });
 

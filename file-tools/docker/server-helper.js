@@ -241,10 +241,11 @@ async function convertHtmlToPdf(html) {
  * @param {Buffer} imageBuffer - The image file buffer.
  * @param {Object} options - Options for image generation.
  * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
+ * @param {string} [options.transparentColor='#FFFFFF'] - Background color for transparent images.
  * @returns {Promise<Buffer>} The JPEG image buffer.
  */
 async function convertImageToJpg(imageBuffer, options = {}) {
-    const { jpegQuality = 90 } = options;
+    const { jpegQuality = 90, transparentColor = '#FFFFFF' } = options;
 
     if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
@@ -260,7 +261,15 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         await fs.writeFile(inputPath, imageBuffer);
 
         // Use ImageMagick convert command
-        const args = [inputPath, '-quality', String(jpegQuality), outputPath];
+        const args = [
+            inputPath,
+            '-background',
+            transparentColor,
+            '-flatten',
+            '-quality',
+            String(jpegQuality),
+            outputPath
+        ];
 
         await new Promise((resolve, reject) => {
             execFile('convert', args, (error, stdout, stderr) => {

@@ -18,7 +18,8 @@ app.post('/image-to-jpg', async c => {
     const imageBuffer = await helper.getFileAsBuffer(body, 'image');
 
     const options = {
-        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 90
+        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 90,
+        transparentColor: body['transparentColor'] || '#FFFFFF'
     };
 
     const jpgBuffer = await helper.convertImageToJpg(imageBuffer, options);
