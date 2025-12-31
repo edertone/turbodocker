@@ -40,6 +40,22 @@ describe('POST /image-to-jpg', () => {
     const imageDir = path.join(__dirname, 'resources', 'image-to-jpg');
     before(ensureOutDir);
 
+    it('should convert a PNG image to JPG', async () => {
+        const imagePath = path.join(imageDir, 'png-sample.png');
+        const imageBuffer = await fs.readFile(imagePath);
+
+        const response = await convertImage(imageBuffer, 'png-sample.png');
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
+
+        const responseBuffer = Buffer.from(await response.arrayBuffer());
+        assert(responseBuffer.length > 0, 'Response buffer should not be empty');
+
+        // Save the converted image
+        const outputPath = path.join(OUT_DIR, 'png-sample.jpg');
+        await fs.writeFile(outputPath, responseBuffer);
+    });
+
     it('should convert a PNG image with transparent background to JPG with white background', async () => {
         const imagePath = path.join(imageDir, 'png-sample-transparent.png');
         const imageBuffer = await fs.readFile(imagePath);
