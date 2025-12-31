@@ -37,6 +37,7 @@ WORKDIR /app
 #    - font-noto-cjk: Required for Chinese/Japanese/Korean (Heavy but necessary)
 #    - font-noto-emoji: For emojis
 RUN apk add --no-cache \
+    redis \
     chromium \
     nss \
     freetype \
@@ -55,7 +56,7 @@ RUN apk add --no-cache \
 COPY --from=builder --chown=converter:converter /app/node_modules ./node_modules
 
 # Copy application files
-COPY --chown=converter:converter package.json server.js server-helper.js ./
+COPY --chown=converter:converter package.json server.js server-helper.js start.sh ./
 
 # Switch to non-root user
 USER converter
@@ -63,4 +64,4 @@ USER converter
 EXPOSE 5001
 
 # Use exec form for CMD to handle signals correctly
-CMD ["node", "server.js"]
+CMD ["./start.sh"]

@@ -1,9 +1,11 @@
 const { serve } = require('@hono/node-server');
 const { Hono } = require('hono');
 const helper = require('./server-helper.js');
+const Redis = require('ioredis');
 
 const app = new Hono();
 const PORT = 5001;
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 // Error handling middleware
 app.onError((err, c) => {
@@ -92,6 +94,37 @@ const handleHtmlToPdf = async (c, returnBase64) => {
 
 app.post('/html-to-pdf-binary', c => handleHtmlToPdf(c, false));
 app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
+
+// Cache text set
+app.post('/cache-text-set', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const { key, value, expire } = body;
+
+    if (!key || !value) {
+        throw new Error("Missing 'key' or 'value' in POST body");
+    }
+
+    if (expire) {
+        await redis.set(key, value, 'EX', parseInt(expire, 10));
+    } else {
+        await redis.set(key, value);
+    }
+
+    return c.json({ success: true });
+});
+
+// Cache text get
+app.post('/cache-text-get', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const { key } = body;
+
+    if (!key) {
+        throw new Error("Missing 'key' in POST body");
+    }
+
+    const value = await redis.get(key);
+    return c.json({ key, value });
+});
 
 // Start Server
 console.log(`Server running on http://0.0.0.0:${PORT}`);
