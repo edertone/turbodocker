@@ -41,10 +41,10 @@ describe('POST /image-to-jpg', () => {
     before(ensureOutDir);
 
     it('should convert a PNG image with transparent background to JPG with white background', async () => {
-        const imagePath = path.join(imageDir, 'sample-transparent.png');
+        const imagePath = path.join(imageDir, 'png-sample-transparent.png');
         const imageBuffer = await fs.readFile(imagePath);
 
-        const response = await convertImage(imageBuffer, 'sample-transparent.png');
+        const response = await convertImage(imageBuffer, 'png-sample-transparent.png');
         assert.strictEqual(response.status, 200);
         assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
 
@@ -52,15 +52,15 @@ describe('POST /image-to-jpg', () => {
         assert(responseBuffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
-        const outputPath = path.join(OUT_DIR, 'sample-transparent-png-white-bg.jpg');
+        const outputPath = path.join(OUT_DIR, 'png-sample-transparent-bg-white.jpg');
         await fs.writeFile(outputPath, responseBuffer);
     });
 
     it('should convert a PNG image with transparent background to JPG with black background', async () => {
-        const imagePath = path.join(imageDir, 'sample-transparent.png');
+        const imagePath = path.join(imageDir, 'png-sample-transparent.png');
         const imageBuffer = await fs.readFile(imagePath);
 
-        const response = await convertImage(imageBuffer, 'sample-transparent.png', undefined, '#000000');
+        const response = await convertImage(imageBuffer, 'png-sample-transparent.png', undefined, '#000000');
         assert.strictEqual(response.status, 200);
         assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
 
@@ -68,15 +68,15 @@ describe('POST /image-to-jpg', () => {
         assert(responseBuffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
-        const outputPath = path.join(OUT_DIR, 'sample-transparent-png-black-bg.jpg');
+        const outputPath = path.join(OUT_DIR, 'png-sample-transparent-bg-black.jpg');
         await fs.writeFile(outputPath, responseBuffer);
     });
 
     it('should convert a BMP image to JPG', async () => {
-        const imagePath = path.join(imageDir, 'sample.bmp');
+        const imagePath = path.join(imageDir, 'bmp-sample.bmp');
         const imageBuffer = await fs.readFile(imagePath);
 
-        const response = await convertImage(imageBuffer, 'sample.bmp');
+        const response = await convertImage(imageBuffer, 'bmp-sample.bmp');
         assert.strictEqual(response.status, 200);
         assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
 
@@ -84,20 +84,20 @@ describe('POST /image-to-jpg', () => {
         assert(responseBuffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
-        const outputPath = path.join(OUT_DIR, 'sample-bmp.jpg');
+        const outputPath = path.join(OUT_DIR, 'bmp-sample.jpg');
         await fs.writeFile(outputPath, responseBuffer);
     });
 
     it('should respect the jpegQuality parameter', async () => {
-        const imagePath = path.join(imageDir, 'sample-transparent.png');
+        const imagePath = path.join(imageDir, 'png-sample-transparent.png');
         const imageBuffer = await fs.readFile(imagePath);
 
         // Convert with low quality
-        const lowQualityResponse = await convertImage(imageBuffer, 'sample-transparent.png', 10);
+        const lowQualityResponse = await convertImage(imageBuffer, 'png-sample-transparent.png', 10);
         const lowQualityBuffer = Buffer.from(await lowQualityResponse.arrayBuffer());
 
         // Convert with high quality
-        const highQualityResponse = await convertImage(imageBuffer, 'sample-transparent.png', 100);
+        const highQualityResponse = await convertImage(imageBuffer, 'png-sample-transparent.png', 100);
         const highQualityBuffer = Buffer.from(await highQualityResponse.arrayBuffer());
 
         assert(
@@ -106,8 +106,8 @@ describe('POST /image-to-jpg', () => {
         );
 
         // Save both quality versions
-        const lowQualityPath = path.join(OUT_DIR, 'sample-quality-10.jpg');
-        const highQualityPath = path.join(OUT_DIR, 'sample-quality-100.jpg');
+        const lowQualityPath = path.join(OUT_DIR, 'png-sample-transparent-qual10.jpg');
+        const highQualityPath = path.join(OUT_DIR, 'png-sample-transparent-qual100.jpg');
         await fs.writeFile(lowQualityPath, lowQualityBuffer);
         await fs.writeFile(highQualityPath, highQualityBuffer);
     });
