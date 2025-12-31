@@ -45,7 +45,7 @@ describe('HTML to PDF API', function () {
         assert.ok(result.buffer.length > 1000, 'PDF buffer should not be empty');
 
         // Save PDF to tests-out folder for manual inspection
-        const outputDir = path.join(__dirname, '..', 'tests-out');
+        const outputDir = path.join(__dirname, '..', 'tests-out', 'html-to-pdf');
         if (!fs.existsSync(outputDir)) {
             fs.mkdirSync(outputDir, { recursive: true });
         }

@@ -1,9 +1,17 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
 const { promises: fs } = require('node:fs');
+const fsSync = require('node:fs');
 const path = require('node:path');
 
 const API_URL = 'http://localhost:5001';
+const OUT_DIR = path.join(__dirname, '..', 'tests-out', 'image-to-jpg');
+
+function ensureOutDir() {
+    if (!fsSync.existsSync(OUT_DIR)) {
+        fsSync.mkdirSync(OUT_DIR, { recursive: true });
+    }
+}
 
 /**
  * Helper to make API requests for image conversion.
@@ -27,7 +35,7 @@ async function convertImage(imageBuffer, originalFilename, jpegQuality) {
 
 describe('POST /image-to-jpg', () => {
     const imageDir = path.join(__dirname, 'resources', 'image-to-jpg');
-    const outputDir = path.join(__dirname, '..', 'tests-out', 'image-to-jpg');
+    before(ensureOutDir);
 
     it('should convert a PNG image to JPG', async () => {
         const imagePath = path.join(imageDir, 'sample-transparent.png');
@@ -39,9 +47,9 @@ describe('POST /image-to-jpg', () => {
 
         const responseBuffer = Buffer.from(await response.arrayBuffer());
         assert(responseBuffer.length > 0, 'Response buffer should not be empty');
-        
+
         // Save the converted image
-        const outputPath = path.join(outputDir, 'sample-transparent-png.jpg');
+        const outputPath = path.join(OUT_DIR, 'sample-transparent-png.jpg');
         await fs.writeFile(outputPath, responseBuffer);
     });
 
@@ -57,7 +65,7 @@ describe('POST /image-to-jpg', () => {
         assert(responseBuffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
-        const outputPath = path.join(outputDir, 'sample-bmp.jpg');
+        const outputPath = path.join(OUT_DIR, 'sample-bmp.jpg');
         await fs.writeFile(outputPath, responseBuffer);
     });
 
@@ -73,11 +81,14 @@ describe('POST /image-to-jpg', () => {
         const highQualityResponse = await convertImage(imageBuffer, 'sample-transparent.png', 100);
         const highQualityBuffer = Buffer.from(await highQualityResponse.arrayBuffer());
 
-        assert(lowQualityBuffer.length < highQualityBuffer.length, 'Low quality image should be smaller than high quality image');
+        assert(
+            lowQualityBuffer.length < highQualityBuffer.length,
+            'Low quality image should be smaller than high quality image'
+        );
 
         // Save both quality versions
-        const lowQualityPath = path.join(outputDir, 'sample-quality-10.jpg');
-        const highQualityPath = path.join(outputDir, 'sample-quality-100.jpg');
+        const lowQualityPath = path.join(OUT_DIR, 'sample-quality-10.jpg');
+        const highQualityPath = path.join(OUT_DIR, 'sample-quality-100.jpg');
         await fs.writeFile(lowQualityPath, lowQualityBuffer);
         await fs.writeFile(highQualityPath, highQualityBuffer);
     });
@@ -88,6 +99,9 @@ describe('POST /image-to-jpg', () => {
         assert.strictEqual(response.status, 500);
 
         const json = await response.json();
-        assert(json.error.includes('Could not convert image to JPG'), 'Error message should indicate conversion failure');
+        assert(
+            json.error.includes('Could not convert image to JPG'),
+            'Error message should indicate conversion failure'
+        );
     });
 });

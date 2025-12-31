@@ -260,11 +260,7 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         await fs.writeFile(inputPath, imageBuffer);
 
         // Use ImageMagick convert command
-        const args = [
-            inputPath,
-            '-quality', String(jpegQuality),
-            outputPath
-        ];
+        const args = [inputPath, '-quality', String(jpegQuality), outputPath];
 
         await new Promise((resolve, reject) => {
             execFile('convert', args, (error, stdout, stderr) => {
@@ -280,10 +276,7 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         throw new Error(`Could not convert image to JPG: ${error.message}`);
     } finally {
         // Clean up temp files
-        await Promise.allSettled([
-            fs.unlink(inputPath).catch(() => {}),
-            fs.unlink(outputPath).catch(() => {})
-        ]);
+        await Promise.allSettled([fs.unlink(inputPath).catch(() => {}), fs.unlink(outputPath).catch(() => {})]);
     }
 }
 

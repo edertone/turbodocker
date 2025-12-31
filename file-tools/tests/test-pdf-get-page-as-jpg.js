@@ -5,7 +5,7 @@ const assert = require('assert');
 
 const PDF_FILE_PATH = path.join(__dirname, 'resources', 'sample30.pdf');
 const ENDPOINT = 'http://localhost:5001/pdf-get-page-as-jpg';
-const OUT_DIR = path.join(__dirname, '..', 'tests-out');
+const OUT_DIR = path.join(__dirname, '..', 'tests-out', 'pdf-get-page-as-jpg');
 
 function ensureOutDir() {
     if (!fs.existsSync(OUT_DIR)) {
