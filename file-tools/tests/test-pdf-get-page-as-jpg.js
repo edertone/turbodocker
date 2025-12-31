@@ -3,9 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
-const PDF_FILE_PATH = path.join(__dirname, 'resources', 'sample30.pdf');
+const PDF_FILE_PATH = path.join(__dirname, 'resources', 'pdf-samples', 'sample30.pdf');
 const ENDPOINT = 'http://localhost:5001/pdf-get-page-as-jpg';
-const OUT_DIR = path.join(__dirname, '..', 'tests-out');
+const OUT_DIR = path.join(__dirname, '..', 'tests-out', 'pdf-get-page-as-jpg');
 
 function ensureOutDir() {
     if (!fs.existsSync(OUT_DIR)) {
@@ -13,7 +13,7 @@ function ensureOutDir() {
     }
 }
 
-function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 90 }) {
+function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 75 }) {
     return new Promise((resolve, reject) => {
         if (!fs.existsSync(PDF_FILE_PATH)) {
             return reject(new Error('sample30.pdf not found in resources directory'));
@@ -71,7 +71,7 @@ describe('PDF Get Page as JPG API', function () {
     before(ensureOutDir);
 
     it('should return a JPEG image for the first page with width', async function () {
-        const result = await sendPdfToJpgEndpoint({ page: 0, width: 300, jpegQuality: 90 });
+        const result = await sendPdfToJpgEndpoint({ page: 0, width: 300, jpegQuality: 75 });
         assert.strictEqual(result.statusCode, 200, 'Expected HTTP 200');
         assert.ok(result.headers['content-type'].includes('image/jpeg'), 'Expected image/jpeg content type');
         assert.ok(result.buffer.length > 1000, 'JPEG buffer should not be empty');

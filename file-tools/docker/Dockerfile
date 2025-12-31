@@ -31,7 +31,8 @@ WORKDIR /app
 # 1. Chromium & Deps: For HTML-to-PDF
 # 2. Nodejs: To run the server (npm is NOT installed to save space)
 # 3. Ghostscript & Poppler: For PDF manipulation
-# 4. Fonts: 
+# 4. imagemagick: Required for image conversion
+# 5. Fonts: 
 #    - ttf-dejavu: Much smaller fallback for Latin/Western text than font-noto
 #    - font-noto-cjk: Required for Chinese/Japanese/Korean (Heavy but necessary)
 #    - font-noto-emoji: For emojis
@@ -44,6 +45,7 @@ RUN apk add --no-cache \
     nodejs \
     ghostscript \
     poppler-utils \
+    imagemagick \
     ttf-freefont \
     font-noto-cjk \
     font-noto-emoji \
