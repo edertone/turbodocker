@@ -236,11 +236,63 @@ async function convertHtmlToPdf(html) {
     }
 }
 
+/**
+ * Converts an image buffer to a JPEG buffer using ImageMagick.
+ * @param {Buffer} imageBuffer - The image file buffer.
+ * @param {Object} options - Options for image generation.
+ * @param {number} [options.jpegQuality=90] - JPEG quality (1-100).
+ * @returns {Promise<Buffer>} The JPEG image buffer.
+ */
+async function convertImageToJpg(imageBuffer, options = {}) {
+    const { jpegQuality = 90 } = options;
+
+    if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
+        throw new Error('JPEG quality must be an integer between 1 and 100');
+    }
+
+    const uniqueId = crypto.randomUUID();
+    const tempDir = os.tmpdir();
+    const inputPath = path.join(tempDir, `${uniqueId}_input`);
+    const outputPath = path.join(tempDir, `${uniqueId}_output.jpg`);
+
+    try {
+        // Write input buffer to temp file
+        await fs.writeFile(inputPath, imageBuffer);
+
+        // Use ImageMagick convert command
+        const args = [
+            inputPath,
+            '-quality', String(jpegQuality),
+            outputPath
+        ];
+
+        await new Promise((resolve, reject) => {
+            execFile('convert', args, (error, stdout, stderr) => {
+                if (error) return reject(new Error(`ImageMagick conversion failed: ${stderr || error.message}`));
+                resolve();
+            });
+        });
+
+        // Read the converted file
+        const jpegBuffer = await fs.readFile(outputPath);
+        return jpegBuffer;
+    } catch (error) {
+        throw new Error(`Could not convert image to JPG: ${error.message}`);
+    } finally {
+        // Clean up temp files
+        await Promise.allSettled([
+            fs.unlink(inputPath).catch(() => {}),
+            fs.unlink(outputPath).catch(() => {})
+        ]);
+    }
+}
+
 module.exports = {
     parseBodyVariables,
     getFileAsBuffer,
     countPdfPages,
     convertHtmlToPdf,
     isValidPdf,
-    getPdfPageAsJpg
+    getPdfPageAsJpg,
+    convertImageToJpg
 };

@@ -12,6 +12,22 @@ app.onError((err, c) => {
     return c.json({ error: err.message || 'Processing failed' }, status);
 });
 
+// Image to JPG
+app.post('/image-to-jpg', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const imageBuffer = await helper.getFileAsBuffer(body, 'image');
+
+    const options = {
+        jpegQuality: body['jpegQuality'] ? parseInt(body['jpegQuality'], 10) : 90
+    };
+
+    const jpgBuffer = await helper.convertImageToJpg(imageBuffer, options);
+
+    return c.body(jpgBuffer, 200, {
+        'Content-Type': 'image/jpeg'
+    });
+});
+
 // PDF Validation
 app.post('/pdf-is-valid', async c => {
     const body = await helper.parseBodyVariables(c);
