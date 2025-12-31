@@ -1,4 +1,3 @@
-// tests/test-html-to-pdf.test.js
 const http = require('http');
 const assert = require('assert');
 const fs = require('fs');

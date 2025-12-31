@@ -5,6 +5,7 @@
 ### Set Text in Cache
 
 Stores a text value in the cache with a given key and an optional expiration time.
+Text cache is stored using Redis, all in RAM, so we need to verify the appropiate settings.
 
 **Endpoint:** `/cache-text-set`
 
