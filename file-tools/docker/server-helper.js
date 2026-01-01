@@ -311,21 +311,18 @@ const cacheHelper = {
     set: async (key, buffer, ttlSeconds) => {
         const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
 
-        // 1. CHECK FOR EXISTING KEY to avoid orphan files
+        // CHECK FOR EXISTING KEY to avoid orphan files
         const existing = db.prepare('SELECT filename FROM file_cache WHERE key = ?').get(key);
         if (existing) {
-            // Delete the old file quietly
             await fs.unlink(path.join(BLOB_DIR, existing.filename)).catch(() => {});
         }
 
-        // 2. Generate new filename
+        // Generate file
         const filename = crypto.randomUUID();
         const filePath = path.join(BLOB_DIR, filename);
-
-        // 3. Write new file
         await fs.writeFile(filePath, buffer);
 
-        // 4. Update DB
+        // Update DB
         try {
             const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)');
             stmt.run(key, filename, expiresAt);
@@ -349,27 +346,28 @@ const cacheHelper = {
         return filePath;
     },
 
+    // Delete a key from the cache. Returns true if deleted, false if not found.
     del: async key => {
         const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ?');
         const row = stmt.get(key);
 
         if (row) {
             db.prepare('DELETE FROM file_cache WHERE key = ?').run(key);
-            // Async delete file
             await fs.unlink(path.join(BLOB_DIR, row.filename)).catch(() => {});
             return true;
         }
         return false;
     },
 
+    // Clear the entire cache
     clear: async () => {
-        // Drop all data
         db.exec('DELETE FROM file_cache');
         // Delete all files in blob directory
         const files = await fs.readdir(BLOB_DIR);
         await Promise.all(files.map(f => fs.unlink(path.join(BLOB_DIR, f)).catch(() => {})));
     },
 
+    // Prune expired cache entries
     prune: async () => {
         const now = Date.now();
         // Find expired files
