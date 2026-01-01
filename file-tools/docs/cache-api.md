@@ -2,10 +2,13 @@
 
 ## Cache API endpoints documentation
 
+Text cache is stored using Redis, all in RAM, so we need to verify the appropiate settings.
+
+---
+
 ### Set Text in Cache
 
 Stores a text value in the cache with a given key and an optional expiration time.
-Text cache is stored using Redis, all in RAM, so we need to verify the appropiate settings.
 
 **Endpoint:** `/cache-text-set`
 
@@ -105,15 +108,6 @@ Removes a text value from the cache using its key.
 }
 ```
 
-If the key did not exist, `deleted` will be `false`:
-
-```json
-{
-    "success": true,
-    "deleted": false
-}
-```
-
 If the `key` parameter is missing, returns HTTP 400 with an error message.
 
 **Example (Node.js):**
@@ -126,4 +120,39 @@ const response = await fetch('http://localhost:5001/cache-text-clear', {
 });
 const result = await response.json();
 console.log('Cache clear success:', result.success, 'Deleted:', result.deleted);
+```
+
+---
+
+### Clear All Text from Cache
+
+Removes all text values from the cache. **Use with caution!** This will delete all keys in the Redis database used by this service.
+
+**Endpoint:** `/cache-text-clear-all`
+
+**Method:** `POST`
+
+**Content-Type:** `application/json`
+
+**Parameters:**
+
+None
+
+**Response:**
+
+```json
+{
+    "success": true
+}
+```
+
+**Example (Node.js):**
+
+```javascript
+const response = await fetch('http://localhost:5001/cache-text-clear-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+});
+const result = await response.json();
+console.log('Cache clear all success:', result.success);
 ```

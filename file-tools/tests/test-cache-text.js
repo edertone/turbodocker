@@ -89,4 +89,32 @@ describe('Text Cache API', function () {
         assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200');
         assert.deepStrictEqual(getResult.body, { key: expiringKey, value: null }, 'Expected value to be null after expiration');
     });
+
+    it('should clear all keys from cache', async function () {
+        // Set multiple keys
+        await makeRequest('/cache-text-set', { key: 'key1', value: 'value1' });
+        await makeRequest('/cache-text-set', { key: 'key2', value: 'value2' });
+        await makeRequest('/cache-text-set', { key: 'key3', value: 'value3' });
+
+        // Confirm keys exist
+        let get1 = await makeRequest('/cache-text-get', { key: 'key1' });
+        let get2 = await makeRequest('/cache-text-get', { key: 'key2' });
+        let get3 = await makeRequest('/cache-text-get', { key: 'key3' });
+        assert.strictEqual(get1.body.value, 'value1', 'Expected key1 to exist');
+        assert.strictEqual(get2.body.value, 'value2', 'Expected key2 to exist');
+        assert.strictEqual(get3.body.value, 'value3', 'Expected key3 to exist');
+
+        // Clear all keys
+        const clearAllResult = await makeRequest('/cache-text-clear-all', {});
+        assert.strictEqual(clearAllResult.statusCode, 200, 'Expected HTTP 200 for clear all');
+        assert.deepStrictEqual(clearAllResult.body, { success: true }, 'Expected success message for clear all');
+
+        // Confirm all keys are gone
+        get1 = await makeRequest('/cache-text-get', { key: 'key1' });
+        get2 = await makeRequest('/cache-text-get', { key: 'key2' });
+        get3 = await makeRequest('/cache-text-get', { key: 'key3' });
+        assert.strictEqual(get1.body.value, null, 'Expected key1 to be cleared');
+        assert.strictEqual(get2.body.value, null, 'Expected key2 to be cleared');
+        assert.strictEqual(get3.body.value, null, 'Expected key3 to be cleared');
+    });
 });

@@ -140,6 +140,12 @@ app.post('/cache-text-clear', async c => {
     return c.json({ success: true, deleted: result === 1 });
 });
 
+// Cache text clear all keys - Use with caution!
+app.post('/cache-text-clear-all', async c => {
+    await redis.flushdb();
+    return c.json({ success: true });
+});
+
 // Start Server
 console.log(`Server running on http://0.0.0.0:${PORT}`);
 serve({
