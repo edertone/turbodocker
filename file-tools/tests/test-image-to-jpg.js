@@ -1,8 +1,6 @@
-const http = require('http');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { randomBytes } = require('crypto');
 
 const API_URL = 'http://localhost:5001';
 const OUT_DIR = path.join(__dirname, '..', 'tests-out', 'image-to-jpg');
@@ -21,70 +19,36 @@ function ensureOutDir() {
  * @param {string} [transparentColor] - Optional transparent background color.
  * @returns {Promise<Object>} - The response object with statusCode, buffer, and headers.
  */
-function convertImage(imageBuffer, originalFilename, jpegQuality, transparentColor) {
-    return new Promise((resolve, reject) => {
-        const boundary = `----WebKitFormBoundary${randomBytes(16).toString('hex')}`;
-        
-        let body = Buffer.concat([
-            Buffer.from(`--${boundary}\r\n`),
-            Buffer.from(`Content-Disposition: form-data; name="image"; filename="${originalFilename}"\r\n`),
-            Buffer.from('Content-Type: application/octet-stream\r\n\r\n'),
-            imageBuffer,
-            Buffer.from('\r\n')
-        ]);
-        
-        if (jpegQuality !== undefined) {
-            body = Buffer.concat([
-                body,
-                Buffer.from(`--${boundary}\r\n`),
-                Buffer.from('Content-Disposition: form-data; name="jpegQuality"\r\n\r\n'),
-                Buffer.from(String(jpegQuality)),
-                Buffer.from('\r\n')
-            ]);
-        }
-        
-        if (transparentColor !== undefined) {
-            body = Buffer.concat([
-                body,
-                Buffer.from(`--${boundary}\r\n`),
-                Buffer.from('Content-Disposition: form-data; name="transparentColor"\r\n\r\n'),
-                Buffer.from(transparentColor),
-                Buffer.from('\r\n')
-            ]);
-        }
-        
-        body = Buffer.concat([
-            body,
-            Buffer.from(`--${boundary}--\r\n`)
-        ]);
-
-        const req = http.request(
-            `${API_URL}/image-to-jpg`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
-                    'Content-Length': body.length
-                }
-            },
-            res => {
-                const chunks = [];
-                res.on('data', chunk => chunks.push(chunk));
-                res.on('end', () => {
-                    const buffer = Buffer.concat(chunks);
-                    resolve({
-                        statusCode: res.statusCode,
-                        buffer,
-                        headers: res.headers
-                    });
-                });
-            }
-        );
-
-        req.on('error', err => reject(err));
-        req.write(body);
-        req.end();
+async function convertImage(imageBuffer, originalFilename, jpegQuality, transparentColor) {
+    const fetch = (await import('node-fetch')).default;
+    const FormData = require('form-data');
+    
+    const formData = new FormData();
+    formData.append('image', imageBuffer, originalFilename);
+    
+    if (jpegQuality !== undefined) {
+        formData.append('jpegQuality', String(jpegQuality));
+    }
+    
+    if (transparentColor !== undefined) {
+        formData.append('transparentColor', transparentColor);
+    }
+    
+    const response = await fetch(`${API_URL}/image-to-jpg`, {
+        method: 'POST',
+        body: formData,
+        headers: formData.getHeaders()
     });
+    
+    const arrayBuffer = await response.arrayBuffer();
+    return {
+        statusCode: response.status,
+        buffer: Buffer.from(arrayBuffer),
+        headers: {
+            'content-type': response.headers.get('content-type'),
+            'content-length': response.headers.get('content-length')
+        }
+    };
 }
 
 describe('Image to JPG API', function () {
