@@ -2,24 +2,24 @@
 
 ## Cache API endpoints documentation
 
-The cache is stored on the file system inside the Docker container, so it will persist as long as the container's volume is not destroyed. Volume can be mounted on host to persist the cached data.
+The cache is stored on the file system inside the Docker container, so it will persist as long as the container's volume is not destroyed. The volume can be mounted on the host to persist the cached data.
 
 ---
 
 ### Set Value in Cache
 
-Stores a value in the cache with a given key and an optional expiration time. This can be text or any binary data.
+Stores a value in the cache with a given key and an optional expiration time. The input is converted to a binary buffer before storage, making it suitable for both text strings and binary files (PDFs, Images, etc.).
 
 **Endpoint:** `/cache-set`
 
 **Method:** `POST`
 
-**Content-Type:** `multipart/form-data`
+**Content-Type:** `multipart/form-data` (Recommended for files) or `application/json`
 
 **Parameters:**
 
 - `key` (string): The unique key for the cache entry.
-- `value` (file/buffer): The value to store. This can be text or binary data.
+- `value` (file/string): The value to store. If a file is uploaded, its binary content is stored. If a string is provided, it is converted to a buffer.
 - `expire` (optional - integer): The expiration time in seconds.
 
 **Response:**
@@ -30,16 +30,17 @@ Stores a value in the cache with a given key and an optional expiration time. Th
 }
 ```
 
-**Example (Node.js):**
+**Example (Node.js - Storing a File):**
 
 ```javascript
 const FormData = require('form-data');
 const fs = require('fs');
 
 const form = new FormData();
-form.append('key', 'my-key');
-form.append('value', 'my-value'); // or fs.createReadStream('/path/to/file')
-form.append('expire', '60');
+form.append('key', 'my-file-key');
+// You can append a file stream or a simple string
+form.append('value', fs.createReadStream('./document.pdf'));
+form.append('expire', '3600'); // Expire in 1 hour
 
 const response = await fetch('http://localhost:5001/cache-set', {
     method: 'POST',
@@ -53,7 +54,7 @@ console.log('Set cache success:', result.success);
 
 ### Get Value from Cache
 
-Retrieves a value from the cache using its key.
+Retrieves a value from the cache using its key. The server automatically deserializes the stored data and returns it as a binary stream.
 
 **Endpoint:** `/cache-get`
 
@@ -67,7 +68,8 @@ Retrieves a value from the cache using its key.
 
 **Response:**
 
-The raw value from the cache. The `Content-Type` will be `application/octet-stream`. If the key is not found, it returns a JSON object with a null value.
+- **Found:** Returns the raw binary data. `Content-Type` will be `application/octet-stream`.
+- **Not Found:** Returns a JSON object indicating null. `Content-Type` will be `application/json`.
 
 **Example (Node.js):**
 
@@ -75,15 +77,23 @@ The raw value from the cache. The `Content-Type` will be `application/octet-stre
 const response = await fetch('http://localhost:5001/cache-get', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'my-key' })
+    body: JSON.stringify({ key: 'my-file-key' })
 });
 
+// Check Content-Type to determine if we got the file or a JSON response
 if (response.headers.get('content-type').includes('application/json')) {
     const result = await response.json();
-    console.log('Retrieved value:', result.value); // Likely null
+    if (result.value === null) {
+        console.log('Cache miss: Key not found');
+    }
 } else {
-    const result = await response.text(); // or .buffer() for binary data
-    console.log('Retrieved value:', result);
+    // We got the binary data back
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Example: Write the buffer back to a file
+    require('fs').writeFileSync('./retrieved-document.pdf', buffer);
+    console.log('File retrieved from cache');
 }
 ```
 
@@ -112,7 +122,7 @@ Removes a value from the cache using its key.
 }
 ```
 
-If the `key` parameter is missing, returns HTTP 400 with an error message.
+- `deleted`: `true` if the key existed and was removed, `false` if the key did not exist.
 
 **Example (Node.js):**
 
@@ -120,17 +130,17 @@ If the `key` parameter is missing, returns HTTP 400 with an error message.
 const response = await fetch('http://localhost:5001/cache-clear', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'my-key' })
+    body: JSON.stringify({ key: 'my-file-key' })
 });
 const result = await response.json();
-console.log('Cache clear success:', result.success, 'Deleted:', result.deleted);
+console.log('Success:', result.success, 'Was deleted:', result.deleted);
 ```
 
 ---
 
 ### Clear All Values from Cache
 
-Removes all values from the cache. **Use with caution!** This will delete all files in the cache directory.
+Removes **all** values from the cache. Use with caution, as this will delete all files in the cache directory.
 
 **Endpoint:** `/cache-clear-all`
 

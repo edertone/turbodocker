@@ -1,6 +1,15 @@
 const assert = require('assert');
 const FormData = require('form-data');
 const fs = require('fs');
+const path = require('path');
+
+const OUT_DIR = path.join(__dirname, '..', 'tests-out', 'test-cache');
+
+function ensureOutDir() {
+    if (!fs.existsSync(OUT_DIR)) {
+        fs.mkdirSync(OUT_DIR, { recursive: true });
+    }
+}
 
 async function makeRequest(path, data, isMultipart = false) {
     const fetch = (await import('node-fetch')).default;
@@ -51,6 +60,10 @@ describe('Cache API', function () {
 
     const testKey = 'test-key';
     const testValue = 'Hello, World!';
+    
+    before(function () {
+        ensureOutDir();
+    });
 
     it('should set and get a value from cache', async function () {
         // Set value
@@ -155,5 +168,54 @@ describe('Cache API', function () {
         assert.deepStrictEqual(get1.body, { key: 'key1', value: null }, 'Expected key1 to be cleared');
         assert.deepStrictEqual(get2.body, { key: 'key2', value: null }, 'Expected key2 to be cleared');
         assert.deepStrictEqual(get3.body, { key: 'key3', value: null }, 'Expected key3 to be cleared');
+    });
+
+    it('should save and retrieve a PDF file from cache', async function () {
+        const cacheKey = 'key1';
+        const pdfPath = 'tests/resources/pdf-samples/sample30.pdf';
+
+        // Create a stream for the PDF file
+        const originalPdfBuffer = fs.readFileSync(pdfPath);
+
+        const setResult = await makeRequest(
+            '/cache-set',
+            {
+                key: cacheKey,
+                value: {
+                    buffer: originalPdfBuffer,
+                    options: { filename: 'sample30.pdf', contentType: 'application/pdf' }
+                }
+            },
+            true
+        );
+
+        assert.strictEqual(setResult.statusCode, 200, 'Expected HTTP 200 for set');
+
+        // Retrieve the PDF file from cache
+        const getResult = await makeRequest('/cache-get', { key: cacheKey });
+        assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200 for get');
+
+        fs.writeFileSync(path.join(OUT_DIR, 'sample30.pdf'), getResult.body);
+
+        // Compare the retrieved buffer with the original file
+        assert.ok(getResult.body instanceof Buffer, 'Expected the retrieved value to be a Buffer');
+        assert.strictEqual(
+            Buffer.compare(originalPdfBuffer, getResult.body),
+            0,
+            'The retrieved PDF file does not match the original'
+        );
+
+        // Clear the key
+        const clearResult = await makeRequest('/cache-clear', { key: cacheKey });
+        assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear');
+        assert.deepStrictEqual(
+            clearResult.body,
+            { success: true, deleted: true },
+            'Expected deleted: true for existing key'
+        );
+
+        // Confirm key is gone
+        const getResult2 = await makeRequest('/cache-get', { key: cacheKey });
+        assert.deepStrictEqual(getResult2.body, { key: cacheKey, value: null }, 'Expected value to be null after clear');
     });
 });

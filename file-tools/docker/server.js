@@ -97,11 +97,13 @@ app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
 app.post('/cache-set', async c => {
     const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
-    const { key, value, expire } = body;
+    const { key, expire } = body;
 
-    if (!key || !value) {
-        throw new Error("Missing 'key' or 'value' in POST body");
+    if (!key) {
+        throw new Error("Missing 'key' in POST body");
     }
+
+    const value = await helper.getFileAsBuffer(body, 'value');
 
     if (expire) {
         // cache-manager uses seconds for TTL
@@ -127,6 +129,11 @@ app.post('/cache-get', async c => {
 
     if (value === undefined) {
         return c.json({ key, value: null });
+    }
+
+    // If the cache store serialized the Buffer to a JSON object (e.g. fs-hash), convert it back
+    if (value && typeof value === 'object' && value.type === 'Buffer' && Array.isArray(value.data)) {
+        value = Buffer.from(value.data);
     }
 
     // Return as a buffer
