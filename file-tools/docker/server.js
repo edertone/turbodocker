@@ -125,10 +125,10 @@ app.post('/cache-get', async c => {
         throw new Error("Missing 'key' in POST body");
     }
 
-    const value = await cacheManager.get(key);
+    let value = await cacheManager.get(key);
 
     if (value === undefined) {
-        return c.json({ key, value: null });
+        return c.json({ error: 'Key not found' }, 404);
     }
 
     // If the cache store serialized the Buffer to a JSON object (e.g. fs-hash), convert it back

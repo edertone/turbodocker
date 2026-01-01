@@ -68,8 +68,8 @@ Retrieves a value from the cache using its key. The server automatically deseria
 
 **Response:**
 
-- **Found:** Returns the raw binary data. `Content-Type` will be `application/octet-stream`.
-- **Not Found:** Returns a JSON object indicating null. `Content-Type` will be `application/json`.
+- **Found (HTTP 200):** Returns the raw binary data. `Content-Type` will be `application/octet-stream`.
+- **Not Found (HTTP 404):** Returns a JSON error message. `Content-Type` will be `application/json`.
 
 **Example (Node.js):**
 
@@ -80,20 +80,20 @@ const response = await fetch('http://localhost:5001/cache-get', {
     body: JSON.stringify({ key: 'my-file-key' })
 });
 
-// Check Content-Type to determine if we got the file or a JSON response
-if (response.headers.get('content-type').includes('application/json')) {
-    const result = await response.json();
-    if (result.value === null) {
-        console.log('Cache miss: Key not found');
-    }
-} else {
-    // We got the binary data back
+if (response.ok) {
+    // HTTP 200: We got the binary data back
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     // Example: Write the buffer back to a file
     require('fs').writeFileSync('./retrieved-document.pdf', buffer);
     console.log('File retrieved from cache');
+} else if (response.status === 404) {
+    // HTTP 404: Key not found
+    console.log('Cache miss: Key not found');
+} else {
+    // Other errors
+    console.error('Error:', response.status);
 }
 ```
 

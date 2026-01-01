@@ -60,7 +60,7 @@ describe('Cache API', function () {
 
     const testKey = 'test-key';
     const testValue = 'Hello, World!';
-    
+
     before(function () {
         ensureOutDir();
     });
@@ -96,7 +96,7 @@ describe('Cache API', function () {
 
         // Confirm key is gone
         getResult = await makeRequest('/cache-get', { key: testKey });
-        assert.deepStrictEqual(getResult.body, { key: testKey, value: null }, 'Expected value to be null after clear');
+        assert.strictEqual(getResult.statusCode, 404, 'Expected HTTP 404 after clear');
     });
 
     it('should return deleted: false for non-existent key', async function () {
@@ -118,14 +118,11 @@ describe('Cache API', function () {
         );
     });
 
-    it('should return null for a non-existent key', async function () {
+    it('should return 404 for a non-existent key', async function () {
         const getResult = await makeRequest('/cache-get', { key: 'non-existent-key' });
-        assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200');
-        assert.deepStrictEqual(
-            getResult.body,
-            { key: 'non-existent-key', value: null },
-            'Expected null value for non-existent key'
-        );
+
+        assert.strictEqual(getResult.statusCode, 404, 'Expected HTTP 404');
+        assert(getResult.body.error, 'Expected error message in body');
     });
 
     it('should expire a key after the specified duration', async function () {
@@ -142,12 +139,7 @@ describe('Cache API', function () {
 
         // Try to get the expired value
         const getResult = await makeRequest('/cache-get', { key: expiringKey });
-        assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200');
-        assert.deepStrictEqual(
-            getResult.body,
-            { key: expiringKey, value: null },
-            'Expected value to be null after expiration'
-        );
+        assert.strictEqual(getResult.statusCode, 404, 'Expected HTTP 404 for expired key');
     });
 
     it('should clear all keys from cache', async function () {
@@ -165,9 +157,9 @@ describe('Cache API', function () {
         let get1 = await makeRequest('/cache-get', { key: 'key1' });
         let get2 = await makeRequest('/cache-get', { key: 'key2' });
         let get3 = await makeRequest('/cache-get', { key: 'key3' });
-        assert.deepStrictEqual(get1.body, { key: 'key1', value: null }, 'Expected key1 to be cleared');
-        assert.deepStrictEqual(get2.body, { key: 'key2', value: null }, 'Expected key2 to be cleared');
-        assert.deepStrictEqual(get3.body, { key: 'key3', value: null }, 'Expected key3 to be cleared');
+        assert.strictEqual(get1.statusCode, 404, 'Expected key1 to be cleared');
+        assert.strictEqual(get2.statusCode, 404, 'Expected key2 to be cleared');
+        assert.strictEqual(get3.statusCode, 404, 'Expected key3 to be cleared');
     });
 
     it('should save and retrieve a PDF file from cache', async function () {
@@ -216,6 +208,6 @@ describe('Cache API', function () {
 
         // Confirm key is gone
         const getResult2 = await makeRequest('/cache-get', { key: cacheKey });
-        assert.deepStrictEqual(getResult2.body, { key: cacheKey, value: null }, 'Expected value to be null after clear');
+        assert.strictEqual(getResult2.statusCode, 404, 'Expected HTTP 404 after clear');
     });
 });
