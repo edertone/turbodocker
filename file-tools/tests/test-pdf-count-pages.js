@@ -1,7 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
-const { randomBytes } = require('crypto');
 const assert = require('assert');
 
 const ENDPOINT = 'http://localhost:5001/pdf-count-pages';
@@ -12,64 +10,62 @@ const TEST_CASES = [
     { file: 'sample30.pdf', expected: 30 }
 ];
 
-function countPagesForFile(pdfPath, expectedPages) {
-    return new Promise(resolve => {
-        if (!fs.existsSync(pdfPath)) {
-            return resolve({ success: false, error: 'File not found' });
-        }
+async function countPagesForFile(pdfPath, expectedPages) {
+    if (!fs.existsSync(pdfPath)) {
+        return { success: false, error: 'File not found' };
+    }
 
-        const boundary = `----WebKitFormBoundary${randomBytes(16).toString('hex')}`;
+    try {
+        const fetch = (await import('node-fetch')).default;
+        const FormData = require('form-data');
+        
         const fileContents = fs.readFileSync(pdfPath);
         const fileName = path.basename(pdfPath);
-
-        const body = Buffer.concat([
-            Buffer.from(`--${boundary}\r\n`),
-            Buffer.from(`Content-Disposition: form-data; name="pdf"; filename="${fileName}"\r\n`),
-            Buffer.from('Content-Type: application/pdf\r\n\r\n'),
-            fileContents,
-            Buffer.from(`\r\n--${boundary}--\r\n`)
-        ]);
-
-        const req = http.request(
-            ENDPOINT,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
-                    'Content-Length': body.length
-                }
-            },
-            res => {
-                let data = '';
-                res.on('data', chunk => (data += chunk));
-                res.on('end', () => {
-                    try {
-                        const result = JSON.parse(data);
-                        if (result.pages !== undefined) {
-                            const pass = result.pages === expectedPages;
-                            resolve({
-                                success: pass,
-                                actual: result.pages,
-                                expected: expectedPages,
-                                error: pass ? null : `Expected ${expectedPages}, got ${result.pages}`
-                            });
-                        } else {
-                            resolve({ success: false, error: result.error || data });
-                        }
-                    } catch (e) {
-                        resolve({ success: false, error: 'Invalid response: ' + data });
-                    }
-                });
-            }
-        );
-
-        req.on('error', err => {
-            resolve({ success: false, error: 'Request error: ' + err });
+        
+        const formData = new FormData();
+        formData.append('pdf', fileContents, fileName);
+        
+        const response = await fetch(ENDPOINT, {
+            method: 'POST',
+            body: formData,
+            headers: formData.getHeaders()
         });
-
-        req.write(body);
-        req.end();
-    });
+        
+        if (!response.ok) {
+            return {
+                success: false,
+                actual: null,
+                expected: expectedPages,
+                error: `HTTP ${response.status}: ${response.statusText}`
+            };
+        }
+        
+        const result = await response.json();
+        
+        if (result.pages !== undefined) {
+            const pass = result.pages === expectedPages;
+            return {
+                success: pass,
+                actual: result.pages,
+                expected: expectedPages,
+                error: pass ? null : `Expected ${expectedPages}, got ${result.pages}`
+            };
+        } else {
+            return {
+                success: false,
+                actual: null,
+                expected: expectedPages,
+                error: result.error || 'No pages count returned'
+            };
+        }
+    } catch (error) {
+        return {
+            success: false,
+            actual: null,
+            expected: expectedPages,
+            error: 'Request failed: ' + error.message
+        };
+    }
 }
 
 describe('PDF Count Pages API', function () {

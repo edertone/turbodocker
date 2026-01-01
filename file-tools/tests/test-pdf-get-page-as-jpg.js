@@ -1,4 +1,3 @@
-const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -13,57 +12,42 @@ function ensureOutDir() {
     }
 }
 
-function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 75 }) {
-    return new Promise((resolve, reject) => {
-        if (!fs.existsSync(PDF_FILE_PATH)) {
-            return reject(new Error('sample30.pdf not found in resources directory'));
-        }
-        const pdfBuffer = fs.readFileSync(PDF_FILE_PATH);
-        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
-        const formFields = [
-            `--${boundary}\r\nContent-Disposition: form-data; name="pdf"; filename="sample.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
-            pdfBuffer
-        ];
-        formFields.push(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="page"\r\n\r\n${page}`);
-        if (width !== undefined) {
-            formFields.push(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="width"\r\n\r\n${width}`);
-        }
-        if (height !== undefined) {
-            formFields.push(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="height"\r\n\r\n${height}`);
-        }
-        formFields.push(
-            `\r\n--${boundary}\r\nContent-Disposition: form-data; name="jpegQuality"\r\n\r\n${jpegQuality}`
-        );
-        formFields.push(`\r\n--${boundary}--\r\n`);
-        const body = Buffer.concat(
-            formFields.map(field => (typeof field === 'string' ? Buffer.from(field, 'utf-8') : field))
-        );
-        const req = http.request(
-            ENDPOINT,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'multipart/form-data; boundary=' + boundary,
-                    'Content-Length': body.length
-                }
-            },
-            res => {
-                let chunks = [];
-                res.on('data', chunk => chunks.push(chunk));
-                res.on('end', () => {
-                    const buffer = Buffer.concat(chunks);
-                    resolve({
-                        statusCode: res.statusCode,
-                        headers: res.headers,
-                        buffer
-                    });
-                });
-            }
-        );
-        req.on('error', err => reject(err));
-        req.write(body);
-        req.end();
+async function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 75 }) {
+    if (!fs.existsSync(PDF_FILE_PATH)) {
+        throw new Error('sample30.pdf not found in resources directory');
+    }
+    
+    const fetch = (await import('node-fetch')).default;
+    const FormData = require('form-data');
+    const pdfBuffer = fs.readFileSync(PDF_FILE_PATH);
+    
+    const formData = new FormData();
+    formData.append('pdf', pdfBuffer, 'sample.pdf');
+    formData.append('page', page.toString());
+    if (width !== undefined) {
+        formData.append('width', width.toString());
+    }
+    if (height !== undefined) {
+        formData.append('height', height.toString());
+    }
+    formData.append('jpegQuality', jpegQuality.toString());
+    
+    const response = await fetch(ENDPOINT, {
+        method: 'POST',
+        body: formData,
+        headers: formData.getHeaders()
     });
+    
+    const buffer = Buffer.from(await response.arrayBuffer());
+    
+    return {
+        statusCode: response.status,
+        headers: {
+            'content-type': response.headers.get('content-type'),
+            'content-length': response.headers.get('content-length')
+        },
+        buffer
+    };
 }
 
 describe('PDF Get Page as JPG API', function () {
