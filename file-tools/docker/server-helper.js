@@ -282,11 +282,10 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     });
 }
 
-const CACHE_DIR = '/app/file-tools-cache';
-
+// --- CACHE HELPER USING SQLITE3 ---
 let db;
 try {
-    db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
+    db = new Database(path.join('/app/file-tools-cache', 'file-tools-cache.db'));
     // WAL mode allows better concurrency and prevents locking issues
     db.pragma('journal_mode = WAL');
     
@@ -305,10 +304,8 @@ try {
 }
 
 const cacheHelper = {
-    /**
-     * Set a value in the cache with an optional TTL (in seconds).
-     * If no TTL is provided, it never expires (effectively).
-     */
+    // Set a value in the cache with an optional TTL (in seconds).
+    // If no TTL is provided, it never expires (effectively).   
     set: (key, buffer, ttlSeconds) => {
         // If ttlSeconds is provided, calculate expiry. 
         // If not, set to Max Safe Integer (approx 285,000 years).
@@ -320,9 +317,7 @@ const cacheHelper = {
         stmt.run(key, buffer, expiresAt);
     },
 
-    /**
-     * Get a value from the cache. Returns undefined if missing or expired.
-     */
+    // Get a value from the cache. Returns undefined if missing or expired.
     get: (key) => {
         const now = Date.now();
         const stmt = db.prepare('SELECT data FROM file_cache WHERE key = ? AND expires_at > ?');
@@ -330,10 +325,8 @@ const cacheHelper = {
         return row ? row.data : undefined;
     },
 
-    /**
-     * Delete a specific key.
-     * @returns {boolean} True if a key was actually deleted, false otherwise.
-     */
+    // Delete a specific key
+    // @returns {boolean} True if a key was actually deleted, false otherwise.
     del: (key) => {
         const stmt = db.prepare('DELETE FROM file_cache WHERE key = ?');
         const info = stmt.run(key);
@@ -341,16 +334,12 @@ const cacheHelper = {
         return info.changes > 0;
     },
 
-    /**
-     * Clear the entire cache.
-     */
+    // Clear the entire cache
     clear: () => {
         db.exec('DELETE FROM file_cache');
     },
 
-    /**
-     * Delete only expired items.
-     */
+    // Delete only expired items
     prune: () => {
         const now = Date.now();
         const stmt = db.prepare('DELETE FROM file_cache WHERE expires_at <= ?');
