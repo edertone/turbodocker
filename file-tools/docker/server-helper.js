@@ -253,42 +253,35 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
     }
 
-    const uniqueId = crypto.randomUUID();
-    const tempDir = os.tmpdir();
-    const inputPath = path.join(tempDir, `${uniqueId}_input`);
-    const outputPath = path.join(tempDir, `${uniqueId}_output.jpg`);
-
-    try {
-        // Write input buffer to temp file
-        await fs.writeFile(inputPath, imageBuffer);
-
-        // Use ImageMagick convert command
+    const { spawn } = require('node:child_process');
+    return await new Promise((resolve, reject) => {
         const args = [
-            inputPath,
+            '-', // read from stdin
             '-background',
             transparentColor,
             '-flatten',
             '-quality',
             String(jpegQuality),
-            outputPath
+            'jpg:-' // write to stdout
         ];
+        const magick = spawn('magick', args);
+        let stdoutBuffers = [];
+        let stderrBuffers = [];
 
-        await new Promise((resolve, reject) => {
-            execFile('magick', args, (error, stdout, stderr) => {
-                if (error) return reject(new Error(`ImageMagick conversion failed: ${stderr || error.message}`));
-                resolve();
-            });
+        magick.stdout.on('data', (data) => stdoutBuffers.push(data));
+        magick.stderr.on('data', (data) => stderrBuffers.push(data));
+
+        magick.on('error', (err) => reject(new Error(`Failed to start ImageMagick: ${err.message}`)));
+        magick.on('close', (code) => {
+            if (code !== 0) {
+                const stderr = Buffer.concat(stderrBuffers).toString();
+                return reject(new Error(`Could not convert image to JPG: ${stderr}`));
+            }
+            resolve(Buffer.concat(stdoutBuffers));
         });
-
-        // Read the converted file
-        const jpegBuffer = await fs.readFile(outputPath);
-        return jpegBuffer;
-    } catch (error) {
-        throw new Error(`Could not convert image to JPG: ${error.message}`);
-    } finally {
-        // Clean up temp files
-        await Promise.allSettled([fs.unlink(inputPath).catch(() => {}), fs.unlink(outputPath).catch(() => {})]);
-    }
+        magick.stdin.write(imageBuffer);
+        magick.stdin.end();
+    });
 }
 
 let cacheManager = null;
