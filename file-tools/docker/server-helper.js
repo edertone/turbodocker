@@ -1,10 +1,9 @@
 const { execFile } = require('node:child_process');
-const { promises: fs } = require('node:fs');
+const { promises: fs, mkdirSync, existsSync } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
-const { createCache } = require('cache-manager');
-const { DiskStore } = require('cache-manager-fs-hash');
+const Database = require('better-sqlite3');
 
 // Global executable paths
 const _pdfinfoExecutable = 'pdfinfo';
@@ -49,7 +48,6 @@ async function isValidPdf(pdfBuffer) {
     if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
         return false;
     }
-
     try {
         await new Promise((resolve, reject) => {
             const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
@@ -284,21 +282,82 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     });
 }
 
-let cacheManager = null;
+const CACHE_DIR = '/app/file-tools-cache';
 
-async function getCacheManager() {
-    if (cacheManager) {
-        return cacheManager;
-    }
-    cacheManager = createCache(
-        new DiskStore({
-            path: '/app/cache-data', // path for cached files
-            subdirs: true, // create sub-directories
-            zip: false // zip files to save disk space
-        })
-    );
-    return cacheManager;
+let db;
+try {
+    db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
+    // WAL mode allows better concurrency and prevents locking issues
+    db.pragma('journal_mode = WAL');
+    
+    // Create table: key, data (BLOB), expires_at (Timestamp in ms)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS file_cache (
+            key TEXT PRIMARY KEY,
+            data BLOB,
+            expires_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_expires_at ON file_cache(expires_at);
+    `);
+} catch (err) {
+    console.error('Failed to initialize SQLite cache:', err);
+    throw err;
 }
+
+const cacheHelper = {
+    /**
+     * Set a value in the cache with an optional TTL (in seconds).
+     * If no TTL is provided, it never expires (effectively).
+     */
+    set: (key, buffer, ttlSeconds) => {
+        // If ttlSeconds is provided, calculate expiry. 
+        // If not, set to Max Safe Integer (approx 285,000 years).
+        const expiresAt = ttlSeconds 
+            ? Date.now() + (ttlSeconds * 1000) 
+            : Number.MAX_SAFE_INTEGER;
+
+        const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, data, expires_at) VALUES (?, ?, ?)');
+        stmt.run(key, buffer, expiresAt);
+    },
+
+    /**
+     * Get a value from the cache. Returns undefined if missing or expired.
+     */
+    get: (key) => {
+        const now = Date.now();
+        const stmt = db.prepare('SELECT data FROM file_cache WHERE key = ? AND expires_at > ?');
+        const row = stmt.get(key, now);
+        return row ? row.data : undefined;
+    },
+
+    /**
+     * Delete a specific key.
+     * @returns {boolean} True if a key was actually deleted, false otherwise.
+     */
+    del: (key) => {
+        const stmt = db.prepare('DELETE FROM file_cache WHERE key = ?');
+        const info = stmt.run(key);
+        // info.changes contains the number of rows affected
+        return info.changes > 0;
+    },
+
+    /**
+     * Clear the entire cache.
+     */
+    clear: () => {
+        db.exec('DELETE FROM file_cache');
+    },
+
+    /**
+     * Delete only expired items.
+     */
+    prune: () => {
+        const now = Date.now();
+        const stmt = db.prepare('DELETE FROM file_cache WHERE expires_at <= ?');
+        const info = stmt.run(now);
+        return info.changes; // returns number of deleted rows
+    }
+};
 
 module.exports = {
     parseBodyVariables,
@@ -308,5 +367,5 @@ module.exports = {
     isValidPdf,
     getPdfPageAsJpg,
     convertImageToJpg,
-    getCacheManager
+    cacheHelper
 };

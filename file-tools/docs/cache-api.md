@@ -103,7 +103,7 @@ if (response.ok) {
 
 Removes a value from the cache using its key.
 
-**Endpoint:** `/cache-clear`
+**Endpoint:** `/cache-delete-key`
 
 **Method:** `POST`
 
@@ -127,7 +127,7 @@ Removes a value from the cache using its key.
 **Example (Node.js):**
 
 ```javascript
-const response = await fetch('http://localhost:5001/cache-clear', {
+const response = await fetch('http://localhost:5001/cache-delete-key', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: 'my-file-key' })
@@ -142,7 +142,7 @@ console.log('Success:', result.success, 'Was deleted:', result.deleted);
 
 Removes **all** values from the cache. Use with caution, as this will delete all files in the cache directory.
 
-**Endpoint:** `/cache-clear-all`
+**Endpoint:** `/cache-delete-all`
 
 **Method:** `POST`
 
@@ -163,7 +163,7 @@ None
 **Example (Node.js):**
 
 ```javascript
-const response = await fetch('http://localhost:5001/cache-clear-all', {
+const response = await fetch('http://localhost:5001/cache-delete-all', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
 });

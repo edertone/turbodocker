@@ -19,7 +19,7 @@ services:
             - '5001:5001'
         volumes:
             # Persist cache data on the host
-            - ./my/local/cache-folder:/app/cache-data
+            - ./my/local/cache-folder:/app/file-tools-cache
 ```
 
 ## API Documentation
