@@ -16,11 +16,11 @@ async function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 75 
     if (!fs.existsSync(PDF_FILE_PATH)) {
         throw new Error('sample30.pdf not found in resources directory');
     }
-    
+
     const fetch = (await import('node-fetch')).default;
     const FormData = require('form-data');
     const pdfBuffer = fs.readFileSync(PDF_FILE_PATH);
-    
+
     const formData = new FormData();
     formData.append('pdf', pdfBuffer, 'sample.pdf');
     formData.append('page', page.toString());
@@ -31,15 +31,15 @@ async function sendPdfToJpgEndpoint({ page = 0, width, height, jpegQuality = 75 
         formData.append('height', height.toString());
     }
     formData.append('jpegQuality', jpegQuality.toString());
-    
+
     const response = await fetch(ENDPOINT, {
         method: 'POST',
         body: formData,
         headers: formData.getHeaders()
     });
-    
+
     const buffer = Buffer.from(await response.arrayBuffer());
-    
+
     return {
         statusCode: response.status,
         headers: {

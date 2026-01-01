@@ -15,20 +15,20 @@ async function isValidPdfRequest(fileName) {
     if (!fs.existsSync(filePath)) {
         throw new Error(`File not found: ${fileName}`);
     }
-    
+
     const fetch = (await import('node-fetch')).default;
     const FormData = require('form-data');
-    
+
     const pdfBuffer = fs.readFileSync(filePath);
     const formData = new FormData();
     formData.append('pdf', pdfBuffer, fileName);
-    
+
     const response = await fetch(ENDPOINT, {
         method: 'POST',
         body: formData,
         headers: formData.getHeaders()
     });
-    
+
     try {
         return await response.json();
     } catch (e) {

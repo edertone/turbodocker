@@ -297,11 +297,13 @@ async function getCacheManager() {
     if (cacheManager) {
         return cacheManager;
     }
-    cacheManager = createCache(new DiskStore({
-        path: '/app/cache-data', // path for cached files
-        subdirs: true, // create sub-directories
-        zip: false, // zip files to save disk space
-    }));
+    cacheManager = createCache(
+        new DiskStore({
+            path: '/app/cache-data', // path for cached files
+            subdirs: true, // create sub-directories
+            zip: false // zip files to save disk space
+        })
+    );
     return cacheManager;
 }
 

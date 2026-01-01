@@ -93,7 +93,7 @@ const handleHtmlToPdf = async (c, returnBase64) => {
 app.post('/html-to-pdf-binary', c => handleHtmlToPdf(c, false));
 app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
 
-// Cache set
+// Store a value to the cache
 app.post('/cache-set', async c => {
     const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
@@ -113,7 +113,7 @@ app.post('/cache-set', async c => {
     return c.json({ success: true });
 });
 
-// Cache get
+// Obtain a previously stored value from the cache
 app.post('/cache-get', async c => {
     const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
@@ -135,7 +135,7 @@ app.post('/cache-get', async c => {
     });
 });
 
-// Cache clear for a single key
+// Delete a key and its value from the cache
 app.post('/cache-clear', async c => {
     const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
@@ -146,14 +146,14 @@ app.post('/cache-clear', async c => {
     }
 
     // Check if key exists before deleting
-    const exists = await cacheManager.get(key) !== undefined;
+    const exists = (await cacheManager.get(key)) !== undefined;
     if (exists) {
         await cacheManager.del(key);
     }
     return c.json({ success: true, deleted: exists });
 });
 
-// Cache clear all keys - Use with caution!
+// Delete all keys from the cache - Use with caution!
 app.post('/cache-clear-all', async c => {
     const cacheManager = await helper.getCacheManager();
     await cacheManager.clear();

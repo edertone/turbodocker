@@ -18,19 +18,19 @@ async function countPagesForFile(pdfPath, expectedPages) {
     try {
         const fetch = (await import('node-fetch')).default;
         const FormData = require('form-data');
-        
+
         const fileContents = fs.readFileSync(pdfPath);
         const fileName = path.basename(pdfPath);
-        
+
         const formData = new FormData();
         formData.append('pdf', fileContents, fileName);
-        
+
         const response = await fetch(ENDPOINT, {
             method: 'POST',
             body: formData,
             headers: formData.getHeaders()
         });
-        
+
         if (!response.ok) {
             return {
                 success: false,
@@ -39,9 +39,9 @@ async function countPagesForFile(pdfPath, expectedPages) {
                 error: `HTTP ${response.status}: ${response.statusText}`
             };
         }
-        
+
         const result = await response.json();
-        
+
         if (result.pages !== undefined) {
             const pass = result.pages === expectedPages;
             return {

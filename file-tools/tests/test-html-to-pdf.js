@@ -4,7 +4,7 @@ const path = require('path');
 
 async function htmlToPdfRequest(html) {
     const fetch = (await import('node-fetch')).default;
-    
+
     const response = await fetch('http://localhost:5001/html-to-pdf-binary', {
         method: 'POST',
         headers: {
@@ -12,7 +12,7 @@ async function htmlToPdfRequest(html) {
         },
         body: JSON.stringify({ html })
     });
-    
+
     const arrayBuffer = await response.arrayBuffer();
     return {
         statusCode: response.status,

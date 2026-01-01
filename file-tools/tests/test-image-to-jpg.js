@@ -22,24 +22,24 @@ function ensureOutDir() {
 async function convertImage(imageBuffer, originalFilename, jpegQuality, transparentColor) {
     const fetch = (await import('node-fetch')).default;
     const FormData = require('form-data');
-    
+
     const formData = new FormData();
     formData.append('image', imageBuffer, originalFilename);
-    
+
     if (jpegQuality !== undefined) {
         formData.append('jpegQuality', String(jpegQuality));
     }
-    
+
     if (transparentColor !== undefined) {
         formData.append('transparentColor', transparentColor);
     }
-    
+
     const response = await fetch(`${API_URL}/image-to-jpg`, {
         method: 'POST',
         body: formData,
         headers: formData.getHeaders()
     });
-    
+
     const arrayBuffer = await response.arrayBuffer();
     return {
         statusCode: response.status,
@@ -54,8 +54,8 @@ async function convertImage(imageBuffer, originalFilename, jpegQuality, transpar
 describe('Image to JPG API', function () {
     this.timeout(10000); // Allow up to 10s per test
     const imageDir = path.join(__dirname, 'resources', 'image-to-jpg');
-    
-    before(function() {
+
+    before(function () {
         ensureOutDir();
     });
 
