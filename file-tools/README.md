@@ -6,11 +6,8 @@ All endpoints accept POST variables as either `multipart/form-data` (for file up
 
 ## Docker image configuration
 
-The image exposes port `5001` for the API and uses an internal Redis instance for caching. You can configure it using the following environment variables:
-
-- `REDIS_MAX_MEMORY`: Sets the maximum memory for Redis (e.g., `500mb`, `1gb`). Defaults to `500mb`.
-- `REDIS_PERSISTENCE_ENABLED`: Set to `true` to enable Redis persistence. Defaults to `false`, running Redis in-memory only.
-- `REDIS_LOG_LEVEL`: Sets the Redis log level (e.g., `notice`, `warning`). Defaults to logging nothing.
+The image exposes all the API endpoints on port `5001`.
+When using cache features, a volume must be mounted to store the cached data across container restarts.
 
 **Example `docker-compose.yml`**
 
@@ -18,15 +15,11 @@ The image exposes port `5001` for the API and uses an internal Redis instance fo
 services:
     file-tools:
         image: edertone/file-tools:X.X.X
-        ports:
+        ports: # Remove if you don't want external access to this container
             - '5001:5001'
         volumes:
-            # Persist Redis data on the host if REDIS_PERSISTENCE_ENABLED is true
-            - my/local/folder:/redis-data
-        environment:
-            - REDIS_MAX_MEMORY=1gb
-            - REDIS_PERSISTENCE_ENABLED=true # Enable persistence
-            - REDIS_LOG_LEVEL=notice
+            # Persist cache data on the host
+            - ./my/local/cache-folder:/app/cache-data
 ```
 
 ## API Documentation
