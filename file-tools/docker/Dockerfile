@@ -28,7 +28,6 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 WORKDIR /app
 
 # Install Runtime Dependencies
-# - Redis: For caching
 # - Chromium & Deps: For HTML-to-PDF
 # - Nodejs: To run the server (npm is NOT installed to save space)
 # - Ghostscript & Poppler: For PDF manipulation
@@ -38,7 +37,6 @@ WORKDIR /app
 #    - font-noto-cjk: Required for Chinese/Japanese/Korean (Heavy but necessary)
 #    - font-noto-emoji: For emojis
 RUN apk add --no-cache \
-    redis \
     chromium \
     nss \
     freetype \
@@ -52,8 +50,8 @@ RUN apk add --no-cache \
     font-noto-cjk \
     font-noto-emoji \
     && adduser -D converter \
-    && mkdir -p /redis-data \
-    && chown converter:converter /redis-data
+    && mkdir -p /app/cache-data \
+    && chown converter:converter /app/cache-data
 
 # Copy node_modules from the builder stage
 COPY --from=builder --chown=converter:converter /app/node_modules ./node_modules
@@ -64,7 +62,7 @@ COPY --chown=converter:converter package.json server.js server-helper.js start.s
 # Switch to non-root user
 USER converter
 
-VOLUME /redis-data
+VOLUME /app/cache-data
 
 EXPOSE 5001
 

@@ -3,6 +3,8 @@ const { promises: fs } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
+const { createCache } = require('cache-manager');
+const { DiskStore } = require('cache-manager-fs-hash');
 
 // Global executable paths
 const _pdfinfoExecutable = 'pdfinfo';
@@ -289,6 +291,20 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     }
 }
 
+let cacheManager = null;
+
+async function getCacheManager() {
+    if (cacheManager) {
+        return cacheManager;
+    }
+    cacheManager = createCache(new DiskStore({
+        path: '/app/cache-data', // path for cached files
+        subdirs: true, // create sub-directories
+        zip: false, // zip files to save disk space
+    }));
+    return cacheManager;
+}
+
 module.exports = {
     parseBodyVariables,
     getFileAsBuffer,
@@ -296,5 +312,6 @@ module.exports = {
     convertHtmlToPdf,
     isValidPdf,
     getPdfPageAsJpg,
-    convertImageToJpg
+    convertImageToJpg,
+    getCacheManager
 };

@@ -1,11 +1,9 @@
 const { serve } = require('@hono/node-server');
 const { Hono } = require('hono');
 const helper = require('./server-helper.js');
-const Redis = require('ioredis');
 
 const app = new Hono();
 const PORT = 5001;
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 // Error handling middleware
 app.onError((err, c) => {
@@ -95,8 +93,9 @@ const handleHtmlToPdf = async (c, returnBase64) => {
 app.post('/html-to-pdf-binary', c => handleHtmlToPdf(c, false));
 app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
 
-// Cache text set
-app.post('/cache-text-set', async c => {
+// Cache set
+app.post('/cache-set', async c => {
+    const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
     const { key, value, expire } = body;
 
@@ -105,16 +104,18 @@ app.post('/cache-text-set', async c => {
     }
 
     if (expire) {
-        await redis.set(key, value, 'EX', parseInt(expire, 10));
+        // cache-manager uses seconds for TTL
+        await cacheManager.set(key, value, { ttl: parseInt(expire, 10) });
     } else {
-        await redis.set(key, value);
+        await cacheManager.set(key, value);
     }
 
     return c.json({ success: true });
 });
 
-// Cache text get
-app.post('/cache-text-get', async c => {
+// Cache get
+app.post('/cache-get', async c => {
+    const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
     const { key } = body;
 
@@ -122,12 +123,21 @@ app.post('/cache-text-get', async c => {
         throw new Error("Missing 'key' in POST body");
     }
 
-    const value = await redis.get(key);
-    return c.json({ key, value });
+    const value = await cacheManager.get(key);
+
+    if (value === undefined) {
+        return c.json({ key, value: null });
+    }
+
+    // Return as a buffer
+    return c.body(value, 200, {
+        'Content-Type': 'application/octet-stream'
+    });
 });
 
-// Cache text clear for a single key
-app.post('/cache-text-clear', async c => {
+// Cache clear for a single key
+app.post('/cache-clear', async c => {
+    const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
     const { key } = body;
 
@@ -135,14 +145,18 @@ app.post('/cache-text-clear', async c => {
         throw new Error("Missing 'key' in POST body");
     }
 
-    const result = await redis.del(key);
-    // result is 1 if key was deleted, 0 if not found
-    return c.json({ success: true, deleted: result === 1 });
+    // Check if key exists before deleting
+    const exists = await cacheManager.get(key) !== undefined;
+    if (exists) {
+        await cacheManager.del(key);
+    }
+    return c.json({ success: true, deleted: exists });
 });
 
-// Cache text clear all keys - Use with caution!
-app.post('/cache-text-clear-all', async c => {
-    await redis.flushdb();
+// Cache clear all keys - Use with caution!
+app.post('/cache-clear-all', async c => {
+    const cacheManager = await helper.getCacheManager();
+    await cacheManager.clear();
     return c.json({ success: true });
 });
 
