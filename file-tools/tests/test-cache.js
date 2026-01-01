@@ -219,31 +219,35 @@ describe('Cache API', function () {
         const expireSeconds = 1;
 
         // 1. Set a key that will expire in 1 second
-        await makeRequest('/cache-set', { 
-            key: keyExpired, 
-            value: 'I will die', 
-            expire: expireSeconds 
-        }, true);
+        await makeRequest(
+            '/cache-set',
+            {
+                key: keyExpired,
+                value: 'I will die',
+                expire: expireSeconds
+            },
+            true
+        );
 
         // 2. Set a key that will expire in 10 seconds (should survive)
-        await makeRequest('/cache-set', { 
-            key: keyValid, 
-            value: 'I will survive', 
-            expire: 10 
-        }, true);
+        await makeRequest(
+            '/cache-set',
+            {
+                key: keyValid,
+                value: 'I will survive',
+                expire: 10
+            },
+            true
+        );
 
         // 3. Wait 1.5 seconds for the first key to expire
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         // 4. Call the prune endpoint
         const pruneResult = await makeRequest('/cache-prune', {});
-        
+
         assert.strictEqual(pruneResult.statusCode, 200, 'Expected HTTP 200 for prune');
-        assert.deepStrictEqual(
-            pruneResult.body, 
-            { success: true, deleted: 1 }, 
-            'Expected exactly 1 item to be pruned'
-        );
+        assert.deepStrictEqual(pruneResult.body, { success: true, deleted: 1 }, 'Expected exactly 1 item to be pruned');
 
         // 5. Verify the expired key is gone (404)
         const getExpired = await makeRequest('/cache-get', { key: keyExpired });

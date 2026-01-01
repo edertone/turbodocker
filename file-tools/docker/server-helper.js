@@ -266,11 +266,11 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         let stdoutBuffers = [];
         let stderrBuffers = [];
 
-        magick.stdout.on('data', (data) => stdoutBuffers.push(data));
-        magick.stderr.on('data', (data) => stderrBuffers.push(data));
+        magick.stdout.on('data', data => stdoutBuffers.push(data));
+        magick.stderr.on('data', data => stderrBuffers.push(data));
 
-        magick.on('error', (err) => reject(new Error(`Failed to start ImageMagick: ${err.message}`)));
-        magick.on('close', (code) => {
+        magick.on('error', err => reject(new Error(`Failed to start ImageMagick: ${err.message}`)));
+        magick.on('close', code => {
             if (code !== 0) {
                 const stderr = Buffer.concat(stderrBuffers).toString();
                 return reject(new Error(`Could not convert image to JPG: ${stderr}`));
@@ -282,18 +282,21 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     });
 }
 
-// --- CACHE HELPER USING SQLITE3 ---
+// CACHE HELPER USING SQLITE3 ---
+const CACHE_DIR = '/app/file-tools-cache';
+const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
+
 let db;
 try {
-    db = new Database(path.join('/app/file-tools-cache', 'file-tools-cache.db'));
+    db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
     // WAL mode allows better concurrency and prevents locking issues
     db.pragma('journal_mode = WAL');
-    
+
     // Create table: key, data (BLOB), expires_at (Timestamp in ms)
     db.exec(`
         CREATE TABLE IF NOT EXISTS file_cache (
             key TEXT PRIMARY KEY,
-            data BLOB,
+            filename TEXT,
             expires_at INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_expires_at ON file_cache(expires_at);
@@ -304,47 +307,88 @@ try {
 }
 
 const cacheHelper = {
-    // Set a value in the cache with an optional TTL (in seconds).
-    // If no TTL is provided, it never expires (effectively).   
-    set: (key, buffer, ttlSeconds) => {
-        // If ttlSeconds is provided, calculate expiry. 
-        // If not, set to Max Safe Integer (approx 285,000 years).
-        const expiresAt = ttlSeconds 
-            ? Date.now() + (ttlSeconds * 1000) 
-            : Number.MAX_SAFE_INTEGER;
+    // Set a value in the cache (Streams data to disk, stores metadata in DB)
+    set: async (key, buffer, ttlSeconds) => {
+        const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
 
-        const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, data, expires_at) VALUES (?, ?, ?)');
-        stmt.run(key, buffer, expiresAt);
+        // 1. CHECK FOR EXISTING KEY to avoid orphan files
+        const existing = db.prepare('SELECT filename FROM file_cache WHERE key = ?').get(key);
+        if (existing) {
+            // Delete the old file quietly
+            await fs.unlink(path.join(BLOB_DIR, existing.filename)).catch(() => {});
+        }
+
+        // 2. Generate new filename
+        const filename = crypto.randomUUID();
+        const filePath = path.join(BLOB_DIR, filename);
+
+        // 3. Write new file
+        await fs.writeFile(filePath, buffer);
+
+        // 4. Update DB
+        try {
+            const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)');
+            stmt.run(key, filename, expiresAt);
+        } catch (err) {
+            await fs.unlink(filePath).catch(() => {});
+            throw err;
+        }
     },
 
-    // Get a value from the cache. Returns undefined if missing or expired.
-    get: (key) => {
+    // Get a value path. (Returns the filepath, NOT the buffer)
+    getFilePath: key => {
         const now = Date.now();
-        const stmt = db.prepare('SELECT data FROM file_cache WHERE key = ? AND expires_at > ?');
+        const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ? AND expires_at > ?');
         const row = stmt.get(key, now);
-        return row ? row.data : undefined;
+
+        if (!row) return undefined;
+
+        const filePath = path.join(BLOB_DIR, row.filename);
+        if (!existsSync(filePath)) return undefined; // Edge case: file deleted manually
+
+        return filePath;
     },
 
-    // Delete a specific key
-    // @returns {boolean} True if a key was actually deleted, false otherwise.
-    del: (key) => {
-        const stmt = db.prepare('DELETE FROM file_cache WHERE key = ?');
-        const info = stmt.run(key);
-        // info.changes contains the number of rows affected
-        return info.changes > 0;
+    del: async key => {
+        const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ?');
+        const row = stmt.get(key);
+
+        if (row) {
+            db.prepare('DELETE FROM file_cache WHERE key = ?').run(key);
+            // Async delete file
+            await fs.unlink(path.join(BLOB_DIR, row.filename)).catch(() => {});
+            return true;
+        }
+        return false;
     },
 
-    // Clear the entire cache
-    clear: () => {
+    clear: async () => {
+        // Drop all data
         db.exec('DELETE FROM file_cache');
+        // Delete all files in blob directory
+        const files = await fs.readdir(BLOB_DIR);
+        await Promise.all(files.map(f => fs.unlink(path.join(BLOB_DIR, f)).catch(() => {})));
     },
 
-    // Delete only expired items
-    prune: () => {
+    prune: async () => {
         const now = Date.now();
-        const stmt = db.prepare('DELETE FROM file_cache WHERE expires_at <= ?');
-        const info = stmt.run(now);
-        return info.changes; // returns number of deleted rows
+        // Find expired files
+        const stmt = db.prepare('SELECT filename FROM file_cache WHERE expires_at <= ?');
+        const rows = stmt.all(now);
+
+        if (rows.length === 0) return 0;
+
+        // Delete from DB
+        db.prepare('DELETE FROM file_cache WHERE expires_at <= ?').run(now);
+
+        // Delete files from Disk (in background, don't wait)
+        rows.forEach(row => {
+            fs.unlink(path.join(BLOB_DIR, row.filename)).catch(e =>
+                console.error(`Failed to delete ${row.filename}`, e)
+            );
+        });
+
+        return rows.length;
     }
 };
 
