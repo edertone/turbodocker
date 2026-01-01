@@ -185,7 +185,7 @@ app.post('/cache-prune', async c => {
 });
 
 // AUTOMATIC CACHE CLEANUP
-// Run a prune job every 2 hour to remove expired items from the DB file
+// Run a prune job every 2 hours to remove expired items from the DB file
 setInterval(
     async () => {
         try {
