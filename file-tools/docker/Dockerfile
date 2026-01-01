@@ -62,6 +62,8 @@ COPY --chown=converter:converter package.json server.js server-helper.js start.s
 # Switch to non-root user
 USER converter
 
+# Declare the volume for cache data
+# Mount a volume here to persist cache data across container restarts
 VOLUME /app/cache-data
 
 EXPOSE 5001
