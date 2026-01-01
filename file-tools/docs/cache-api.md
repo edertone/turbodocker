@@ -79,3 +79,51 @@ const response = await fetch('http://localhost:5001/cache-text-get', {
 const result = await response.json();
 console.log('Retrieved value:', result.value);
 ```
+
+---
+
+### Clear Text from Cache
+
+Removes a text value from the cache using its key.
+
+**Endpoint:** `/cache-text-clear`
+
+**Method:** `POST`
+
+**Content-Type:** `application/json`
+
+**Parameters:**
+
+- `key` (string): The key of the cache entry to remove.
+
+**Response:**
+
+```json
+{
+    "success": true,
+    "deleted": true
+}
+```
+
+If the key did not exist, `deleted` will be `false`:
+
+```json
+{
+    "success": true,
+    "deleted": false
+}
+```
+
+If the `key` parameter is missing, returns HTTP 400 with an error message.
+
+**Example (Node.js):**
+
+```javascript
+const response = await fetch('http://localhost:5001/cache-text-clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'my-key' })
+});
+const result = await response.json();
+console.log('Cache clear success:', result.success, 'Deleted:', result.deleted);
+```
