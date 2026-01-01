@@ -126,6 +126,20 @@ app.post('/cache-text-get', async c => {
     return c.json({ key, value });
 });
 
+// Cache text clear for a single key
+app.post('/cache-text-clear', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const { key } = body;
+
+    if (!key) {
+        throw new Error("Missing 'key' in POST body");
+    }
+
+    const result = await redis.del(key);
+    // result is 1 if key was deleted, 0 if not found
+    return c.json({ success: true, deleted: result === 1 });
+});
+
 // Start Server
 console.log(`Server running on http://0.0.0.0:${PORT}`);
 serve({

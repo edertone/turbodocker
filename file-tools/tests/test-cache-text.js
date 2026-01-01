@@ -13,6 +13,10 @@ async function makeRequest(path, data) {
     
     const body = await response.json();
     return {
+
+
+
+
         statusCode: response.status,
         body
     };
@@ -34,6 +38,33 @@ describe('Text Cache API', function () {
         const getResult = await makeRequest('/cache-text-get', { key: testKey });
         assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200 for get');
         assert.deepStrictEqual(getResult.body, { key: testKey, value: testValue }, 'Expected to get the set value back');
+    });
+
+    it('should clear an existing key from cache', async function () {
+        // Set value first
+        await makeRequest('/cache-text-set', { key: testKey, value: testValue });
+        // Confirm key exists
+        let getResult = await makeRequest('/cache-text-get', { key: testKey });
+        assert.strictEqual(getResult.body.value, testValue, 'Expected value to be set before clear');
+        // Clear the key
+        const clearResult = await makeRequest('/cache-text-clear', { key: testKey });
+        assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear');
+        assert.deepStrictEqual(clearResult.body, { success: true, deleted: true }, 'Expected deleted: true for existing key');
+        // Confirm key is gone
+        getResult = await makeRequest('/cache-text-get', { key: testKey });
+        assert.strictEqual(getResult.body.value, null, 'Expected value to be null after clear');
+    });
+
+    it('should return deleted: false for non-existent key', async function () {
+        const clearResult = await makeRequest('/cache-text-clear', { key: 'non-existent-key-2' });
+        assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear non-existent');
+        assert.deepStrictEqual(clearResult.body, { success: true, deleted: false }, 'Expected deleted: false for non-existent key');
+    });
+
+    it('should return error if key is missing', async function () {
+        const clearResult = await makeRequest('/cache-text-clear', {});
+        assert.strictEqual(clearResult.statusCode, 400, 'Expected HTTP 400 for missing key');
+        assert(clearResult.body.error && clearResult.body.error.includes('Missing'), 'Expected error message for missing key');
     });
 
     it('should return null for a non-existent key', async function () {
