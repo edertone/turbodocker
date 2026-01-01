@@ -1,15 +1,13 @@
-const { describe, it } = require('node:test');
-const assert = require('node:assert');
-const { promises: fs } = require('node:fs');
-const fsSync = require('node:fs');
-const path = require('node:path');
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
 const API_URL = 'http://localhost:5001';
 const OUT_DIR = path.join(__dirname, '..', 'tests-out', 'image-to-jpg');
 
 function ensureOutDir() {
-    if (!fsSync.existsSync(OUT_DIR)) {
-        fsSync.mkdirSync(OUT_DIR, { recursive: true });
+    if (!fs.existsSync(OUT_DIR)) {
+        fs.mkdirSync(OUT_DIR, { recursive: true });
     }
 }
 
@@ -18,103 +16,120 @@ function ensureOutDir() {
  * @param {Buffer} imageBuffer - The image buffer to send.
  * @param {string} originalFilename - The original filename of the image.
  * @param {number} [jpegQuality] - Optional JPEG quality setting.
- * @returns {Promise<Response>} - The fetch API Response object.
+ * @param {string} [transparentColor] - Optional transparent background color.
+ * @returns {Promise<Object>} - The response object with statusCode, buffer, and headers.
  */
 async function convertImage(imageBuffer, originalFilename, jpegQuality, transparentColor) {
+    const fetch = (await import('node-fetch')).default;
+    const FormData = require('form-data');
+
     const formData = new FormData();
-    formData.append('image', new Blob([imageBuffer]), originalFilename);
+    formData.append('image', imageBuffer, originalFilename);
+
     if (jpegQuality !== undefined) {
         formData.append('jpegQuality', String(jpegQuality));
     }
+
     if (transparentColor !== undefined) {
         formData.append('transparentColor', transparentColor);
     }
 
-    return fetch(`${API_URL}/image-to-jpg`, {
+    const response = await fetch(`${API_URL}/image-to-jpg`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: formData.getHeaders()
     });
+
+    const arrayBuffer = await response.arrayBuffer();
+    return {
+        statusCode: response.status,
+        buffer: Buffer.from(arrayBuffer),
+        headers: {
+            'content-type': response.headers.get('content-type'),
+            'content-length': response.headers.get('content-length')
+        }
+    };
 }
 
-describe('POST /image-to-jpg', () => {
+describe('Image to JPG API', function () {
+    this.timeout(10000); // Allow up to 10s per test
     const imageDir = path.join(__dirname, 'resources', 'image-to-jpg');
-    before(ensureOutDir);
 
-    it('should convert a PNG image to JPG', async () => {
+    before(function () {
+        ensureOutDir();
+    });
+
+    it('should convert a PNG image to JPG', async function () {
         const imagePath = path.join(imageDir, 'png-sample.png');
-        const imageBuffer = await fs.readFile(imagePath);
+        const imageBuffer = fs.readFileSync(imagePath);
 
         const response = await convertImage(imageBuffer, 'png-sample.png');
-        assert.strictEqual(response.status, 200);
-        assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(response.headers['content-type'], 'image/jpeg');
 
-        const responseBuffer = Buffer.from(await response.arrayBuffer());
-        assert(responseBuffer.length > 0, 'Response buffer should not be empty');
+        assert(response.buffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
         const outputPath = path.join(OUT_DIR, 'png-sample.jpg');
-        await fs.writeFile(outputPath, responseBuffer);
+        fs.writeFileSync(outputPath, response.buffer);
     });
 
-    it('should convert a PNG image with transparent background to JPG with white background', async () => {
+    it('should convert a PNG image with transparent background to JPG with white background', async function () {
         const imagePath = path.join(imageDir, 'png-sample-transparent.png');
-        const imageBuffer = await fs.readFile(imagePath);
+        const imageBuffer = fs.readFileSync(imagePath);
 
         const response = await convertImage(imageBuffer, 'png-sample-transparent.png');
-        assert.strictEqual(response.status, 200);
-        assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(response.headers['content-type'], 'image/jpeg');
 
-        const responseBuffer = Buffer.from(await response.arrayBuffer());
-        assert(responseBuffer.length > 0, 'Response buffer should not be empty');
+        assert(response.buffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
         const outputPath = path.join(OUT_DIR, 'png-sample-transparent-bg-white.jpg');
-        await fs.writeFile(outputPath, responseBuffer);
+        fs.writeFileSync(outputPath, response.buffer);
     });
 
-    it('should convert a PNG image with transparent background to JPG with black background', async () => {
+    it('should convert a PNG image with transparent background to JPG with black background', async function () {
         const imagePath = path.join(imageDir, 'png-sample-transparent.png');
-        const imageBuffer = await fs.readFile(imagePath);
+        const imageBuffer = fs.readFileSync(imagePath);
 
         const response = await convertImage(imageBuffer, 'png-sample-transparent.png', undefined, '#000000');
-        assert.strictEqual(response.status, 200);
-        assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(response.headers['content-type'], 'image/jpeg');
 
-        const responseBuffer = Buffer.from(await response.arrayBuffer());
-        assert(responseBuffer.length > 0, 'Response buffer should not be empty');
+        assert(response.buffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
         const outputPath = path.join(OUT_DIR, 'png-sample-transparent-bg-black.jpg');
-        await fs.writeFile(outputPath, responseBuffer);
+        fs.writeFileSync(outputPath, response.buffer);
     });
 
-    it('should convert a BMP image to JPG', async () => {
+    it('should convert a BMP image to JPG', async function () {
         const imagePath = path.join(imageDir, 'bmp-sample.bmp');
-        const imageBuffer = await fs.readFile(imagePath);
+        const imageBuffer = fs.readFileSync(imagePath);
 
         const response = await convertImage(imageBuffer, 'bmp-sample.bmp');
-        assert.strictEqual(response.status, 200);
-        assert.strictEqual(response.headers.get('content-type'), 'image/jpeg');
+        assert.strictEqual(response.statusCode, 200);
+        assert.strictEqual(response.headers['content-type'], 'image/jpeg');
 
-        const responseBuffer = Buffer.from(await response.arrayBuffer());
-        assert(responseBuffer.length > 0, 'Response buffer should not be empty');
+        assert(response.buffer.length > 0, 'Response buffer should not be empty');
 
         // Save the converted image
         const outputPath = path.join(OUT_DIR, 'bmp-sample.jpg');
-        await fs.writeFile(outputPath, responseBuffer);
+        fs.writeFileSync(outputPath, response.buffer);
     });
 
-    it('should respect the jpegQuality parameter', async () => {
+    it('should respect the jpegQuality parameter', async function () {
         const imagePath = path.join(imageDir, 'png-sample-transparent.png');
-        const imageBuffer = await fs.readFile(imagePath);
+        const imageBuffer = fs.readFileSync(imagePath);
 
         // Convert with low quality
         const lowQualityResponse = await convertImage(imageBuffer, 'png-sample-transparent.png', 10);
-        const lowQualityBuffer = Buffer.from(await lowQualityResponse.arrayBuffer());
+        const lowQualityBuffer = lowQualityResponse.buffer;
 
         // Convert with high quality
         const highQualityResponse = await convertImage(imageBuffer, 'png-sample-transparent.png', 100);
-        const highQualityBuffer = Buffer.from(await highQualityResponse.arrayBuffer());
+        const highQualityBuffer = highQualityResponse.buffer;
 
         assert(
             lowQualityBuffer.length < highQualityBuffer.length,
@@ -124,16 +139,16 @@ describe('POST /image-to-jpg', () => {
         // Save both quality versions
         const lowQualityPath = path.join(OUT_DIR, 'png-sample-transparent-qual10.jpg');
         const highQualityPath = path.join(OUT_DIR, 'png-sample-transparent-qual100.jpg');
-        await fs.writeFile(lowQualityPath, lowQualityBuffer);
-        await fs.writeFile(highQualityPath, highQualityBuffer);
+        fs.writeFileSync(lowQualityPath, lowQualityBuffer);
+        fs.writeFileSync(highQualityPath, highQualityBuffer);
     });
 
-    it('should return a 500 error for an invalid image', async () => {
+    it('should return a 500 error for an invalid image', async function () {
         const invalidImageBuffer = Buffer.from('this is not an image');
         const response = await convertImage(invalidImageBuffer, 'invalid.txt');
-        assert.strictEqual(response.status, 500);
+        assert.strictEqual(response.statusCode, 500);
 
-        const json = await response.json();
+        const json = JSON.parse(response.buffer.toString());
         assert(
             json.error.includes('Could not convert image to JPG'),
             'Error message should indicate conversion failure'

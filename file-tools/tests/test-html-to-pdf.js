@@ -1,38 +1,27 @@
-// tests/test-html-to-pdf.test.js
-const http = require('http');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-function htmlToPdfRequest(html) {
-    return new Promise((resolve, reject) => {
-        const data = JSON.stringify({ html });
-        const options = {
-            hostname: 'localhost',
-            port: 5001,
-            path: '/html-to-pdf-binary',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(data)
-            }
-        };
-        const req = http.request(options, res => {
-            const chunks = [];
-            res.on('data', chunk => chunks.push(chunk));
-            res.on('end', () => {
-                const buffer = Buffer.concat(chunks);
-                resolve({
-                    statusCode: res.statusCode,
-                    buffer,
-                    headers: res.headers
-                });
-            });
-        });
-        req.on('error', e => reject(e));
-        req.write(data);
-        req.end();
+async function htmlToPdfRequest(html) {
+    const fetch = (await import('node-fetch')).default;
+
+    const response = await fetch('http://localhost:5001/html-to-pdf-binary', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ html })
     });
+
+    const arrayBuffer = await response.arrayBuffer();
+    return {
+        statusCode: response.status,
+        buffer: Buffer.from(arrayBuffer),
+        headers: {
+            'content-type': response.headers.get('content-type'),
+            'content-length': response.headers.get('content-length')
+        }
+    };
 }
 
 describe('HTML to PDF API', function () {

@@ -93,6 +93,80 @@ const handleHtmlToPdf = async (c, returnBase64) => {
 app.post('/html-to-pdf-binary', c => handleHtmlToPdf(c, false));
 app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
 
+// Store a value to the cache
+app.post('/cache-set', async c => {
+    const cacheManager = await helper.getCacheManager();
+    const body = await helper.parseBodyVariables(c);
+    const { key, expire } = body;
+
+    if (!key) {
+        throw new Error("Missing 'key' in POST body");
+    }
+
+    const value = await helper.getFileAsBuffer(body, 'value');
+
+    if (expire) {
+        // cache-manager uses seconds for TTL
+        await cacheManager.set(key, value, { ttl: parseInt(expire, 10) });
+    } else {
+        await cacheManager.set(key, value);
+    }
+
+    return c.json({ success: true });
+});
+
+// Obtain a previously stored value from the cache
+app.post('/cache-get', async c => {
+    const cacheManager = await helper.getCacheManager();
+    const body = await helper.parseBodyVariables(c);
+    const { key } = body;
+
+    if (!key) {
+        throw new Error("Missing 'key' in POST body");
+    }
+
+    let value = await cacheManager.get(key);
+
+    if (value === undefined) {
+        return c.json({ error: 'Key not found' }, 404);
+    }
+
+    // If the cache store serialized the Buffer to a JSON object (e.g. fs-hash), convert it back
+    if (value && typeof value === 'object' && value.type === 'Buffer' && Array.isArray(value.data)) {
+        value = Buffer.from(value.data);
+    }
+
+    // Return as a buffer
+    return c.body(value, 200, {
+        'Content-Type': 'application/octet-stream'
+    });
+});
+
+// Delete a key and its value from the cache
+app.post('/cache-clear', async c => {
+    const cacheManager = await helper.getCacheManager();
+    const body = await helper.parseBodyVariables(c);
+    const { key } = body;
+
+    if (!key) {
+        throw new Error("Missing 'key' in POST body");
+    }
+
+    // Check if key exists before deleting
+    const exists = (await cacheManager.get(key)) !== undefined;
+    if (exists) {
+        await cacheManager.del(key);
+    }
+    return c.json({ success: true, deleted: exists });
+});
+
+// Delete all keys from the cache - Use with caution!
+app.post('/cache-clear-all', async c => {
+    const cacheManager = await helper.getCacheManager();
+    await cacheManager.clear();
+    return c.json({ success: true });
+});
+
 // Start Server
 console.log(`Server running on http://0.0.0.0:${PORT}`);
 serve({
