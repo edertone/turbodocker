@@ -6,8 +6,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.7",
     "hono": "^4.11.3",
-    "cache-manager": "^7.2.7",
-    "cache-manager-fs-hash": "^3.0.0"
+    "better-sqlite3": "^12.5.0"
   },
   "engines": {
     "node": ">=20.0.0"

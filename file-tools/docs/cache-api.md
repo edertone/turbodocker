@@ -2,15 +2,15 @@
 
 ## Cache API endpoints documentation
 
-The cache is stored on the file system inside the Docker container, so it will persist as long as the container's volume is not destroyed. The volume can be mounted on the host to persist the cached data.
+The cache is implemented using a high-performance hybrid system: **SQLite** is used for metadata and TTL (Time-To-Live) management, while the actual data is stored as **flat files** on the disk. This architecture ensures low RAM usage (via streaming) and prevents locking issues during high concurrency.
+
+**Persistence:** The data is stored inside `/app/cache-data`. To persist the cache between container restarts, ensure this directory is mounted as a volume.
 
 ---
 
-### Set Value in Cache
+### /cache-set
 
-Stores a value in the cache with a given key and an optional expiration time. The input is converted to a binary buffer before storage, making it suitable for both text strings and binary files (PDFs, Images, etc.).
-
-**Endpoint:** `/cache-set`
+Stores a value in the cache with a given key and an optional expiration time. The input is streamed directly to disk, making it highly efficient for large files (PDFs, Images) as well as text strings.
 
 **Method:** `POST`
 
@@ -19,8 +19,8 @@ Stores a value in the cache with a given key and an optional expiration time. Th
 **Parameters:**
 
 - `key` (string): The unique key for the cache entry.
-- `value` (file/string): The value to store. If a file is uploaded, its binary content is stored. If a string is provided, it is converted to a buffer.
-- `expire` (optional - integer): The expiration time in seconds.
+- `value` (file/string): The value to store.
+- `expire` (optional - integer): The expiration time in seconds. If omitted, the item does not expire automatically.
 
 **Response:**
 
@@ -52,11 +52,9 @@ console.log('Set cache success:', result.success);
 
 ---
 
-### Get Value from Cache
+### /cache-get
 
-Retrieves a value from the cache using its key. The server automatically deserializes the stored data and returns it as a binary stream.
-
-**Endpoint:** `/cache-get`
+Retrieves a value from the cache using its key. The server streams the file directly from the disk to the response, ensuring minimal memory usage on the server side.
 
 **Method:** `POST`
 
@@ -68,7 +66,7 @@ Retrieves a value from the cache using its key. The server automatically deseria
 
 **Response:**
 
-- **Found (HTTP 200):** Returns the raw binary data. `Content-Type` will be `application/octet-stream`.
+- **Found (HTTP 200):** Returns the raw binary data as a stream. `Content-Type` will be `application/octet-stream`.
 - **Not Found (HTTP 404):** Returns a JSON error message. `Content-Type` will be `application/json`.
 
 **Example (Node.js):**
@@ -89,7 +87,7 @@ if (response.ok) {
     require('fs').writeFileSync('./retrieved-document.pdf', buffer);
     console.log('File retrieved from cache');
 } else if (response.status === 404) {
-    // HTTP 404: Key not found
+    // HTTP 404: Key not found or expired
     console.log('Cache miss: Key not found');
 } else {
     // Other errors
@@ -99,11 +97,9 @@ if (response.ok) {
 
 ---
 
-### Clear Value from Cache
+### /cache-delete-key
 
-Removes a value from the cache using its key.
-
-**Endpoint:** `/cache-clear`
+Removes a specific value from the cache using its key. This deletes both the metadata record and the physical file from the disk.
 
 **Method:** `POST`
 
@@ -127,7 +123,7 @@ Removes a value from the cache using its key.
 **Example (Node.js):**
 
 ```javascript
-const response = await fetch('http://localhost:5001/cache-clear', {
+const response = await fetch('http://localhost:5001/cache-delete-key', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: 'my-file-key' })
@@ -138,11 +134,42 @@ console.log('Success:', result.success, 'Was deleted:', result.deleted);
 
 ---
 
-### Clear All Values from Cache
+### /cache-prune
 
-Removes **all** values from the cache. Use with caution, as this will delete all files in the cache directory.
+Manually triggers the background cleanup process. This identifies items where the TTL has expired, removes them from the database, and deletes the associated files from the disk.
 
-**Endpoint:** `/cache-clear-all`
+_Note: This process also runs automatically in the background every 2 hours._
+
+**Method:** `POST`
+
+**Content-Type:** `application/json` (Body is optional/ignored)
+
+**Response:**
+
+```json
+{
+    "success": true,
+    "deleted": 5
+}
+```
+
+- `deleted`: An integer representing the count of items that were removed.
+
+**Example (Node.js):**
+
+```javascript
+const response = await fetch('http://localhost:5001/cache-prune', {
+    method: 'POST'
+});
+const result = await response.json();
+console.log('Prune complete. Items removed:', result.deleted);
+```
+
+---
+
+### /cache-delete-all
+
+Removes **all** values from the cache. Use with caution, as this will immediately wipe the database and delete all files in the cache directory.
 
 **Method:** `POST`
 
@@ -163,7 +190,7 @@ None
 **Example (Node.js):**
 
 ```javascript
-const response = await fetch('http://localhost:5001/cache-clear-all', {
+const response = await fetch('http://localhost:5001/cache-delete-all', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
 });

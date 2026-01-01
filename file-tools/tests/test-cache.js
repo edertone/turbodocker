@@ -86,7 +86,7 @@ describe('Cache API', function () {
         assert.strictEqual(getResult.body.toString(), testValue, 'Expected value to be set before clear');
 
         // Clear the key
-        const clearResult = await makeRequest('/cache-clear', { key: testKey });
+        const clearResult = await makeRequest('/cache-delete-key', { key: testKey });
         assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear');
         assert.deepStrictEqual(
             clearResult.body,
@@ -100,7 +100,7 @@ describe('Cache API', function () {
     });
 
     it('should return deleted: false for non-existent key', async function () {
-        const clearResult = await makeRequest('/cache-clear', { key: 'non-existent-key-2' });
+        const clearResult = await makeRequest('/cache-delete-key', { key: 'non-existent-key-2' });
         assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear non-existent');
         assert.deepStrictEqual(
             clearResult.body,
@@ -110,7 +110,7 @@ describe('Cache API', function () {
     });
 
     it('should return error if key is missing for clear', async function () {
-        const clearResult = await makeRequest('/cache-clear', {});
+        const clearResult = await makeRequest('/cache-delete-key', {});
         assert.strictEqual(clearResult.statusCode, 400, 'Expected HTTP 400 for missing key');
         assert(
             clearResult.body.error && clearResult.body.error.includes('Missing'),
@@ -149,7 +149,7 @@ describe('Cache API', function () {
         await makeRequest('/cache-set', { key: 'key3', value: 'value3' }, true);
 
         // Clear all keys
-        const clearAllResult = await makeRequest('/cache-clear-all', {});
+        const clearAllResult = await makeRequest('/cache-delete-all', {});
         assert.strictEqual(clearAllResult.statusCode, 200, 'Expected HTTP 200 for clear all');
         assert.deepStrictEqual(clearAllResult.body, { success: true }, 'Expected success message for clear all');
 
@@ -198,7 +198,7 @@ describe('Cache API', function () {
         );
 
         // Clear the key
-        const clearResult = await makeRequest('/cache-clear', { key: cacheKey });
+        const clearResult = await makeRequest('/cache-delete-key', { key: cacheKey });
         assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear');
         assert.deepStrictEqual(
             clearResult.body,
@@ -209,5 +209,53 @@ describe('Cache API', function () {
         // Confirm key is gone
         const getResult2 = await makeRequest('/cache-get', { key: cacheKey });
         assert.strictEqual(getResult2.statusCode, 404, 'Expected HTTP 404 after clear');
+    });
+
+    it('should prune expired keys correctly', async function () {
+        this.timeout(5000); // Increase timeout for the wait
+
+        const keyExpired = 'to-be-pruned';
+        const keyValid = 'to-be-kept';
+        const expireSeconds = 1;
+
+        // 1. Set a key that will expire in 1 second
+        await makeRequest(
+            '/cache-set',
+            {
+                key: keyExpired,
+                value: 'I will die',
+                expire: expireSeconds
+            },
+            true
+        );
+
+        // 2. Set a key that will expire in 10 seconds (should survive)
+        await makeRequest(
+            '/cache-set',
+            {
+                key: keyValid,
+                value: 'I will survive',
+                expire: 10
+            },
+            true
+        );
+
+        // 3. Wait 1.5 seconds for the first key to expire
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // 4. Call the prune endpoint
+        const pruneResult = await makeRequest('/cache-prune', {});
+
+        assert.strictEqual(pruneResult.statusCode, 200, 'Expected HTTP 200 for prune');
+        assert.deepStrictEqual(pruneResult.body, { success: true, deleted: 1 }, 'Expected exactly 1 item to be pruned');
+
+        // 5. Verify the expired key is gone (404)
+        const getExpired = await makeRequest('/cache-get', { key: keyExpired });
+        assert.strictEqual(getExpired.statusCode, 404, 'Expired key should be not found');
+
+        // 6. Verify the valid key is still there (200)
+        const getValid = await makeRequest('/cache-get', { key: keyValid });
+        assert.strictEqual(getValid.statusCode, 200, 'Valid key should still exist');
+        assert.strictEqual(getValid.body.toString(), 'I will survive');
     });
 });

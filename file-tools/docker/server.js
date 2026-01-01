@@ -1,5 +1,7 @@
 const { serve } = require('@hono/node-server');
 const { Hono } = require('hono');
+const { createReadStream } = require('node:fs');
+const { stream } = require('hono/streaming');
 const helper = require('./server-helper.js');
 
 const app = new Hono();
@@ -95,7 +97,6 @@ app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
 
 // Store a value to the cache
 app.post('/cache-set', async c => {
-    const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
     const { key, expire } = body;
 
@@ -105,19 +106,14 @@ app.post('/cache-set', async c => {
 
     const value = await helper.getFileAsBuffer(body, 'value');
 
-    if (expire) {
-        // cache-manager uses seconds for TTL
-        await cacheManager.set(key, value, { ttl: parseInt(expire, 10) });
-    } else {
-        await cacheManager.set(key, value);
-    }
+    // Parse TTL if present (seconds), otherwise undefined (which becomes permanent)
+    await helper.cacheHelper.set(key, value, expire ? parseInt(expire, 10) : undefined);
 
     return c.json({ success: true });
 });
 
 // Obtain a previously stored value from the cache
 app.post('/cache-get', async c => {
-    const cacheManager = await helper.getCacheManager();
     const body = await helper.parseBodyVariables(c);
     const { key } = body;
 
@@ -125,26 +121,33 @@ app.post('/cache-get', async c => {
         throw new Error("Missing 'key' in POST body");
     }
 
-    let value = await cacheManager.get(key);
+    const filePath = helper.cacheHelper.getFilePath(key);
 
-    if (value === undefined) {
-        return c.json({ error: 'Key not found' }, 404);
+    if (!filePath) {
+        return c.json({ error: 'Key not found or expired' }, 404);
     }
 
-    // If the cache store serialized the Buffer to a JSON object (e.g. fs-hash), convert it back
-    if (value && typeof value === 'object' && value.type === 'Buffer' && Array.isArray(value.data)) {
-        value = Buffer.from(value.data);
-    }
-
-    // Return as a buffer
-    return c.body(value, 200, {
-        'Content-Type': 'application/octet-stream'
-    });
+    // Return stream - Extremely memory efficient
+    return stream(
+        c,
+        async stream => {
+            try {
+                const fileStream = createReadStream(filePath);
+                for await (const chunk of fileStream) {
+                    await stream.write(chunk);
+                }
+            } catch (err) {
+                console.error(`Error streaming file ${filePath}:`, err);
+            }
+        },
+        {
+            headers: { 'Content-Type': 'application/octet-stream' }
+        }
+    );
 });
 
 // Delete a key and its value from the cache
-app.post('/cache-clear', async c => {
-    const cacheManager = await helper.getCacheManager();
+app.post('/cache-delete-key', async c => {
     const body = await helper.parseBodyVariables(c);
     const { key } = body;
 
@@ -152,20 +155,47 @@ app.post('/cache-clear', async c => {
         throw new Error("Missing 'key' in POST body");
     }
 
-    // Check if key exists before deleting
-    const exists = (await cacheManager.get(key)) !== undefined;
-    if (exists) {
-        await cacheManager.del(key);
-    }
-    return c.json({ success: true, deleted: exists });
+    // Capture the boolean result from the helper
+    const wasDeleted = await helper.cacheHelper.del(key);
+
+    return c.json({
+        success: true,
+        deleted: wasDeleted
+    });
 });
 
 // Delete all keys from the cache - Use with caution!
-app.post('/cache-clear-all', async c => {
-    const cacheManager = await helper.getCacheManager();
-    await cacheManager.clear();
+app.post('/cache-delete-all', async c => {
+    await helper.cacheHelper.clear();
     return c.json({ success: true });
 });
+
+// Delete all expired keys from the cache
+app.post('/cache-prune', async c => {
+    try {
+        const deletedCount = await helper.cacheHelper.prune();
+        return c.json({
+            success: true,
+            deleted: deletedCount
+        });
+    } catch (e) {
+        console.error(e);
+        return c.json({ error: 'Pruning failed' }, 500);
+    }
+});
+
+// AUTOMATIC CACHE CLEANUP
+// Run a prune job every 2 hours to remove expired items from the DB file
+setInterval(
+    async () => {
+        try {
+            const deleted = await helper.cacheHelper.prune();
+        } catch (e) {
+            console.error('[Cache Prune] Failed:', e);
+        }
+    },
+    1000 * 60 * 60 * 2
+);
 
 // Start Server
 console.log(`Server running on http://0.0.0.0:${PORT}`);

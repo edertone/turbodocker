@@ -2,11 +2,9 @@
 
 ## Image API endpoints documentation
 
-### Image to JPEG
+### /image-to-jpg
 
 Convert any image to JPEG with a specified quality and an optional background color for transparent areas in the original image
-
-**Endpoint:** `/image-to-jpg`
 
 **Method:** `POST`
 

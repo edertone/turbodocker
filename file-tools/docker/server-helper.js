@@ -1,10 +1,9 @@
 const { execFile } = require('node:child_process');
-const { promises: fs } = require('node:fs');
+const { promises: fs, mkdirSync, existsSync } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
-const { createCache } = require('cache-manager');
-const { DiskStore } = require('cache-manager-fs-hash');
+const Database = require('better-sqlite3');
 
 // Global executable paths
 const _pdfinfoExecutable = 'pdfinfo';
@@ -49,7 +48,6 @@ async function isValidPdf(pdfBuffer) {
     if (!pdfBuffer || pdfBuffer.length < 5 || pdfBuffer.slice(0, 5).toString() !== '%PDF-') {
         return false;
     }
-
     try {
         await new Promise((resolve, reject) => {
             const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
@@ -268,11 +266,11 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         let stdoutBuffers = [];
         let stderrBuffers = [];
 
-        magick.stdout.on('data', (data) => stdoutBuffers.push(data));
-        magick.stderr.on('data', (data) => stderrBuffers.push(data));
+        magick.stdout.on('data', data => stdoutBuffers.push(data));
+        magick.stderr.on('data', data => stderrBuffers.push(data));
 
-        magick.on('error', (err) => reject(new Error(`Failed to start ImageMagick: ${err.message}`)));
-        magick.on('close', (code) => {
+        magick.on('error', err => reject(new Error(`Failed to start ImageMagick: ${err.message}`)));
+        magick.on('close', code => {
             if (code !== 0) {
                 const stderr = Buffer.concat(stderrBuffers).toString();
                 return reject(new Error(`Could not convert image to JPG: ${stderr}`));
@@ -284,21 +282,113 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     });
 }
 
-let cacheManager = null;
+// CACHE HELPER USING SQLITE3 ---
+const CACHE_DIR = '/app/file-tools-cache';
+const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
 
-async function getCacheManager() {
-    if (cacheManager) {
-        return cacheManager;
-    }
-    cacheManager = createCache(
-        new DiskStore({
-            path: '/app/cache-data', // path for cached files
-            subdirs: true, // create sub-directories
-            zip: false // zip files to save disk space
-        })
-    );
-    return cacheManager;
+let db;
+try {
+    db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
+    // WAL mode allows better concurrency and prevents locking issues
+    db.pragma('journal_mode = WAL');
+
+    // Create table: key, data (BLOB), expires_at (Timestamp in ms)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS file_cache (
+            key TEXT PRIMARY KEY,
+            filename TEXT,
+            expires_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_expires_at ON file_cache(expires_at);
+    `);
+} catch (err) {
+    console.error('Failed to initialize SQLite cache:', err);
+    throw err;
 }
+
+const cacheHelper = {
+    // Set a value in the cache (Streams data to disk, stores metadata in DB)
+    set: async (key, buffer, ttlSeconds) => {
+        const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
+
+        // CHECK FOR EXISTING KEY to avoid orphan files
+        const existing = db.prepare('SELECT filename FROM file_cache WHERE key = ?').get(key);
+        if (existing) {
+            await fs.unlink(path.join(BLOB_DIR, existing.filename)).catch(() => {});
+        }
+
+        // Generate file
+        const filename = crypto.randomUUID();
+        const filePath = path.join(BLOB_DIR, filename);
+        await fs.writeFile(filePath, buffer);
+
+        // Update DB
+        try {
+            const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)');
+            stmt.run(key, filename, expiresAt);
+        } catch (err) {
+            await fs.unlink(filePath).catch(() => {});
+            throw err;
+        }
+    },
+
+    // Get a value path. (Returns the filepath, NOT the buffer)
+    getFilePath: key => {
+        const now = Date.now();
+        const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ? AND expires_at > ?');
+        const row = stmt.get(key, now);
+
+        if (!row) return undefined;
+
+        const filePath = path.join(BLOB_DIR, row.filename);
+        if (!existsSync(filePath)) return undefined; // Edge case: file deleted manually
+
+        return filePath;
+    },
+
+    // Delete a key from the cache. Returns true if deleted, false if not found.
+    del: async key => {
+        const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ?');
+        const row = stmt.get(key);
+
+        if (row) {
+            db.prepare('DELETE FROM file_cache WHERE key = ?').run(key);
+            await fs.unlink(path.join(BLOB_DIR, row.filename)).catch(() => {});
+            return true;
+        }
+        return false;
+    },
+
+    // Clear the entire cache
+    clear: async () => {
+        db.exec('DELETE FROM file_cache');
+        // Delete all files in blob directory
+        const files = await fs.readdir(BLOB_DIR);
+        await Promise.all(files.map(f => fs.unlink(path.join(BLOB_DIR, f)).catch(() => {})));
+    },
+
+    // Prune expired cache entries
+    prune: async () => {
+        const now = Date.now();
+        // Find expired files
+        const stmt = db.prepare('SELECT filename FROM file_cache WHERE expires_at <= ?');
+        const rows = stmt.all(now);
+
+        if (rows.length === 0) return 0;
+
+        // Delete from DB
+        db.prepare('DELETE FROM file_cache WHERE expires_at <= ?').run(now);
+
+        // Delete files from Disk (in background, don't wait)
+        rows.forEach(row => {
+            fs.unlink(path.join(BLOB_DIR, row.filename)).catch(e =>
+                console.error(`Failed to delete ${row.filename}`, e)
+            );
+        });
+
+        return rows.length;
+    }
+};
 
 module.exports = {
     parseBodyVariables,
@@ -308,5 +398,5 @@ module.exports = {
     isValidPdf,
     getPdfPageAsJpg,
     convertImageToJpg,
-    getCacheManager
+    cacheHelper
 };

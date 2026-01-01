@@ -2,11 +2,9 @@
 
 ## PDF API endpoints documentation
 
-### PDF Validation
+### /pdf-is-valid
 
 Verify that a provided file is a valid PDF document
-
-**Endpoint:** `/pdf-is-valid`
 
 **Method:** `POST`
 
@@ -40,11 +38,9 @@ console.log('Is valid PDF:', result.valid);
 
 ---
 
-### PDF Page Count
+### /pdf-count-pages
 
 Count the number of pages on a provided PDF file
-
-**Endpoint:** `/pdf-count-pages`
 
 **Method:** `POST`
 
@@ -70,11 +66,9 @@ curl -X POST -F "pdf=@document.pdf" http://localhost:5001/pdf-count-pages
 
 ---
 
-### PDF Page to JPEG
+### /pdf-get-page-as-jpg
 
 Convert a specific PDF page to a JPEG image with custom quality and resolution.
-
-**Endpoint:** `/pdf-get-page-as-jpg`
 
 **Method:** `POST`
 
@@ -113,14 +107,10 @@ const imageBuffer = await response.arrayBuffer();
 
 ---
 
-### HTML to PDF
+### /html-to-pdf-binary
 
 Convert HTML content to a pixel-perfect PDF using the Chromium engine.
-
-**Endpoints:**
-
-- `/html-to-pdf-binary`: Returns the PDF as a binary file (recommended)
-- `/html-to-pdf-base64`: Returns the PDF as a base64 string
+Returns the PDF as a binary file.
 
 **Method:** `POST`
 
@@ -130,17 +120,11 @@ Convert HTML content to a pixel-perfect PDF using the Chromium engine.
 
 - `html` (required - string or file): The HTML content to convert.
 
-**Response (`/html-to-pdf-binary`):**
+**Response:**
 
 - PDF document as binary data (`Content-Type: application/pdf`)
 
-**Response (`/html-to-pdf-base64`):**
-
-```json
-"JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c..."
-```
-
-**Example (Node.js for binary):**
+**Example:**
 
 ```javascript
 const response = await fetch('http://localhost:5001/html-to-pdf-binary', {
@@ -150,4 +134,36 @@ const response = await fetch('http://localhost:5001/html-to-pdf-binary', {
 });
 const pdfBuffer = await response.arrayBuffer();
 // ... save or process pdfBuffer
+```
+
+---
+
+### /html-to-pdf-base64
+
+Convert HTML content to a pixel-perfect PDF using the Chromium engine.
+Returns the PDF as a base64 string.
+
+**Method:** `POST`
+
+**Content-Type:** `multipart/form-data` or `application/json`
+
+**Parameters:**
+
+- `html` (required - string or file): The HTML content to convert.
+
+**Response:**
+
+```json
+"JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c..."
+```
+
+**Example:**
+
+```javascript
+const response = await fetch('http://localhost:5001/html-to-pdf-base64', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html: '<h1>Hello World</h1>' })
+});
+// ... save or process base 64 string
 ```
