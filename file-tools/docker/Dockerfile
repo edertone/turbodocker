@@ -50,7 +50,7 @@ RUN apk add --no-cache \
     font-noto-cjk \
     font-noto-emoji \
     && adduser -D converter \
-    && mkdir -p /app/file-tools-cache/blobs \
+    && mkdir -p /app/file-tools-cache \
     && chown -R converter:converter /app/file-tools-cache
 
 # Copy node_modules from the builder stage

@@ -286,6 +286,21 @@ async function convertImageToJpg(imageBuffer, options = {}) {
 const CACHE_DIR = '/app/file-tools-cache';
 const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
 
+// Try to create directories. If it fails due to permissions, log a clear error.
+try {
+    if (!existsSync(CACHE_DIR)) {
+        mkdirSync(CACHE_DIR, { recursive: true });
+    }
+    if (!existsSync(BLOB_DIR)) {
+        mkdirSync(BLOB_DIR, { recursive: true });
+    }
+} catch (err) {
+    console.error('CRITICAL ERROR: Could not create cache directories.');
+    console.error(`Please ensure the volume mounted at ${CACHE_DIR} is writable by the container user.`);
+    console.error(err);
+    process.exit(1);
+}
+
 let db;
 try {
     db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
