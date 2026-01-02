@@ -2,9 +2,9 @@
 
 ## Cache API endpoints documentation
 
-The cache is implemented using a high-performance hybrid system: **SQLite** is used for metadata and TTL (Time-To-Live) management, while the actual data is stored as **flat files** on the disk. This architecture ensures low RAM usage (via streaming) and prevents locking issues during high concurrency.
+The cache is implemented using a high-performance hybrid system: **SQLite** is used for metadata and TTL (Time-To-Live) management, while the actual data is stored as **flat files** on the disk. This architecture ensures low RAM usage (via streaming) and prevents locking issues during high concurrency. Also the file performance is very fast cause linux uses ram to cache most read files.
 
-**Persistence:** The data is stored inside `/app/cache-data`. To persist the cache between container restarts, ensure this directory is mounted as a volume.
+**Persistence:** The data is stored inside `/app/file-tools-cache`. To persist the cache between container restarts, ensure this directory is mounted as a volume.
 
 ---
 
