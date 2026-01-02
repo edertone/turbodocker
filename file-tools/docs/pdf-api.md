@@ -2,6 +2,14 @@
 
 ## PDF API endpoints documentation
 
+## Index
+
+- [/pdf-is-valid (Check if a file is a valid PDF)](#pdf-is-valid)
+- [/pdf-count-pages (Count the number of pages on a PDF)](#pdf-count-pages)
+- [/pdf-get-page-as-jpg (Extract a page from a PDF as a JPG image)](#pdf-get-page-as-jpg)
+- [/html-to-pdf-binary (Convert html code to a binary PDF file)](#html-to-pdf-binary)
+- [/html-to-pdf-base64 (Convert html code to a base 64 encoded PDF file)](#html-to-pdf-base64)
+
 ### /pdf-is-valid
 
 Verify that a provided file is a valid PDF document

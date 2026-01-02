@@ -6,6 +6,14 @@ The cache is implemented using a high-performance hybrid system: **SQLite** is u
 
 **Persistence:** The data is stored inside `/app/file-tools-cache`. To persist the cache between container restarts, ensure this directory is mounted as a volume.
 
+## Index
+
+- [/cache-set (Save a value to the cache)](#cache-set)
+- [/cache-get (Obtain a value from the cache)](#cache-get)
+- [/cache-delete-key (Delete a value from the cache)](#cache-delete-key)
+- [/cache-prune (Manually clean expired values from the cache)](#cache-prune)
+- [/cache-delete-all (Erase all data from the cache)](#cache-delete-all)
+
 ---
 
 ### /cache-set

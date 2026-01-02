@@ -2,9 +2,17 @@
 
 ## Image API endpoints documentation
 
+Several general purpose methods to operate with images
+
+## Index
+
+- [/image-to-jpg (Convert any image to JPG)](#image-to-jpg)
+
+---
+
 ### /image-to-jpg
 
-Convert any image to JPEG with a specified quality and an optional background color for transparent areas in the original image
+Convert any image to JPEG with a specific quality and an optional background color for transparent areas in the original image
 
 **Method:** `POST`
 
