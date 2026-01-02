@@ -5,10 +5,13 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 const Database = require('better-sqlite3');
 
-// Global executable paths
+// Global paths, executables and variables
 const _pdfinfoExecutable = 'pdfinfo';
 const _ghostscriptExecutable = 'gs';
 const _chromeExecutable = 'chromium';
+const CACHE_DIR = '/app/file-tools-cache';
+const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
+let _cacheManager = null;
 
 /**
  * Helper to parse body variables regardless of Content-Type.
@@ -282,128 +285,140 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     });
 }
 
-// CACHE HELPER USING SQLITE3 ---
-const CACHE_DIR = '/app/file-tools-cache';
-const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
 
-// Try to create directories. If it fails due to permissions, log a clear error.
-try {
-    if (!existsSync(CACHE_DIR)) {
-        mkdirSync(CACHE_DIR, { recursive: true });
+/**
+ * Returns the cache manager object for managing cached files.
+ * The first time this is called, database and directories are initialized.
+ * @returns {object} cacheManager with methods: set, getFilePath, del, clear, prune
+ */
+function getCacheManager() {
+
+    // Return existing instance if already initialized
+    if (_cacheManager) return _cacheManager;
+
+    // Try to create directories. If it fails due to permissions, log a clear error.
+    try {
+        if (!existsSync(CACHE_DIR)) {
+            mkdirSync(CACHE_DIR, { recursive: true });
+        }
+        if (!existsSync(BLOB_DIR)) {
+            mkdirSync(BLOB_DIR, { recursive: true });
+        }
+    } catch (err) {
+        console.error('CRITICAL ERROR: Could not create cache directories.');
+        console.error(`Please ensure the volume mounted at ${CACHE_DIR} is writable by the container user.`);
+        console.error(err);
+        process.exit(1);
     }
-    if (!existsSync(BLOB_DIR)) {
-        mkdirSync(BLOB_DIR, { recursive: true });
-    }
-} catch (err) {
-    console.error('CRITICAL ERROR: Could not create cache directories.');
-    console.error(`Please ensure the volume mounted at ${CACHE_DIR} is writable by the container user.`);
-    console.error(err);
-    process.exit(1);
-}
 
-let db;
-try {
-    db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
-    // WAL mode allows better concurrency and prevents locking issues
-    db.pragma('journal_mode = WAL');
+    // Initialize SQLite database
+    let db;
+    try {
+        db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
+        // WAL mode allows better concurrency and prevents locking issues
+        db.pragma('journal_mode = WAL');
 
-    // Create table: key, data (BLOB), expires_at (Timestamp in ms)
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS file_cache (
-            key TEXT PRIMARY KEY,
-            filename TEXT,
-            expires_at INTEGER
-        );
-        CREATE INDEX IF NOT EXISTS idx_expires_at ON file_cache(expires_at);
-    `);
-} catch (err) {
-    console.error('Failed to initialize SQLite cache:', err);
-    throw err;
-}
-
-const cacheHelper = {
-    // Set a value in the cache (Streams data to disk, stores metadata in DB)
-    set: async (key, buffer, ttlSeconds) => {
-        const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
-
-        // CHECK FOR EXISTING KEY to avoid orphan files
-        const existing = db.prepare('SELECT filename FROM file_cache WHERE key = ?').get(key);
-        if (existing) {
-            await fs.unlink(path.join(BLOB_DIR, existing.filename)).catch(() => {});
-        }
-
-        // Generate file
-        const filename = crypto.randomUUID();
-        const filePath = path.join(BLOB_DIR, filename);
-        await fs.writeFile(filePath, buffer);
-
-        // Update DB
-        try {
-            const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)');
-            stmt.run(key, filename, expiresAt);
-        } catch (err) {
-            await fs.unlink(filePath).catch(() => {});
-            throw err;
-        }
-    },
-
-    // Get a value path. (Returns the filepath, NOT the buffer)
-    getFilePath: key => {
-        const now = Date.now();
-        const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ? AND expires_at > ?');
-        const row = stmt.get(key, now);
-
-        if (!row) return undefined;
-
-        const filePath = path.join(BLOB_DIR, row.filename);
-        if (!existsSync(filePath)) return undefined; // Edge case: file deleted manually
-
-        return filePath;
-    },
-
-    // Delete a key from the cache. Returns true if deleted, false if not found.
-    del: async key => {
-        const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ?');
-        const row = stmt.get(key);
-
-        if (row) {
-            db.prepare('DELETE FROM file_cache WHERE key = ?').run(key);
-            await fs.unlink(path.join(BLOB_DIR, row.filename)).catch(() => {});
-            return true;
-        }
-        return false;
-    },
-
-    // Clear the entire cache
-    clear: async () => {
-        db.exec('DELETE FROM file_cache');
-        // Delete all files in blob directory
-        const files = await fs.readdir(BLOB_DIR);
-        await Promise.all(files.map(f => fs.unlink(path.join(BLOB_DIR, f)).catch(() => {})));
-    },
-
-    // Prune expired cache entries
-    prune: async () => {
-        const now = Date.now();
-        // Find expired files
-        const stmt = db.prepare('SELECT filename FROM file_cache WHERE expires_at <= ?');
-        const rows = stmt.all(now);
-
-        if (rows.length === 0) return 0;
-
-        // Delete from DB
-        db.prepare('DELETE FROM file_cache WHERE expires_at <= ?').run(now);
-
-        // Delete files from Disk (in background, don't wait)
-        rows.forEach(row => {
-            fs.unlink(path.join(BLOB_DIR, row.filename)).catch(e =>
-                console.error(`Failed to delete ${row.filename}`, e)
+        // Create table: key, data (BLOB), expires_at (Timestamp in ms)
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS file_cache (
+                key TEXT PRIMARY KEY,
+                filename TEXT,
+                expires_at INTEGER
             );
-        });
-
-        return rows.length;
+            CREATE INDEX IF NOT EXISTS idx_expires_at ON file_cache(expires_at);
+        `);
+    } catch (err) {
+        console.error('Failed to initialize SQLite cache:', err);
+        throw err;
     }
-};
+
+    _cacheManager = {
+        
+        // Set a value in the cache (Streams data to disk, stores metadata in DB)
+        set: async (key, buffer, ttlSeconds) => {
+            const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
+
+            // CHECK FOR EXISTING KEY to avoid orphan files
+            const existing = db.prepare('SELECT filename FROM file_cache WHERE key = ?').get(key);
+            if (existing) {
+                await fs.unlink(path.join(BLOB_DIR, existing.filename)).catch(() => {});
+            }
+
+            // Generate file
+            const filename = crypto.randomUUID();
+            const filePath = path.join(BLOB_DIR, filename);
+            await fs.writeFile(filePath, buffer);
+
+            // Update DB
+            try {
+                const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)');
+                stmt.run(key, filename, expiresAt);
+            } catch (err) {
+                await fs.unlink(filePath).catch(() => {});
+                throw err;
+            }
+        },
+
+        // Get a value path. (Returns the filepath, NOT the buffer)
+        getFilePath: key => {
+            const now = Date.now();
+            const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ? AND expires_at > ?');
+            const row = stmt.get(key, now);
+
+            if (!row) return undefined;
+
+            const filePath = path.join(BLOB_DIR, row.filename);
+            if (!existsSync(filePath)) return undefined; // Edge case: file deleted manually
+
+            return filePath;
+        },
+
+        // Delete a key from the cache. Returns true if deleted, false if not found.
+        del: async key => {
+            const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ?');
+            const row = stmt.get(key);
+
+            if (row) {
+                db.prepare('DELETE FROM file_cache WHERE key = ?').run(key);
+                await fs.unlink(path.join(BLOB_DIR, row.filename)).catch(() => {});
+                return true;
+            }
+            return false;
+        },
+
+        // Clear the entire cache
+        clear: async () => {
+            db.exec('DELETE FROM file_cache');
+            // Delete all files in blob directory
+            const files = await fs.readdir(BLOB_DIR);
+            await Promise.all(files.map(f => fs.unlink(path.join(BLOB_DIR, f)).catch(() => {})));
+        },
+
+        // Prune expired cache entries
+        prune: async () => {
+            const now = Date.now();
+            // Find expired files
+            const stmt = db.prepare('SELECT filename FROM file_cache WHERE expires_at <= ?');
+            const rows = stmt.all(now);
+
+            if (rows.length === 0) return 0;
+
+            // Delete from DB
+            db.prepare('DELETE FROM file_cache WHERE expires_at <= ?').run(now);
+
+            // Delete files from Disk (in background, don't wait)
+            rows.forEach(row => {
+                fs.unlink(path.join(BLOB_DIR, row.filename)).catch(e =>
+                    console.error(`Failed to delete ${row.filename}`, e)
+                );
+            });
+
+            return rows.length;
+        }
+    };
+
+    return _cacheManager;
+}
 
 module.exports = {
     parseBodyVariables,
@@ -413,5 +428,5 @@ module.exports = {
     isValidPdf,
     getPdfPageAsJpg,
     convertImageToJpg,
-    cacheHelper
+    getCacheManager
 };

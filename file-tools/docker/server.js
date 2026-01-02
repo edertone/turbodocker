@@ -107,7 +107,7 @@ app.post('/cache-set', async c => {
     const value = await helper.getFileAsBuffer(body, 'value');
 
     // Parse TTL if present (seconds), otherwise undefined (which becomes permanent)
-    await helper.cacheHelper.set(key, value, expire ? parseInt(expire, 10) : undefined);
+    await helper.getCacheManager().set(key, value, expire ? parseInt(expire, 10) : undefined);
 
     return c.json({ success: true });
 });
@@ -121,7 +121,7 @@ app.post('/cache-get', async c => {
         throw new Error("Missing 'key' in POST body");
     }
 
-    const filePath = helper.cacheHelper.getFilePath(key);
+    const filePath = helper.getCacheManager().getFilePath(key);
 
     if (!filePath) {
         return c.json({ error: 'Key not found or expired' }, 404);
@@ -156,7 +156,7 @@ app.post('/cache-delete-key', async c => {
     }
 
     // Capture the boolean result from the helper
-    const wasDeleted = await helper.cacheHelper.del(key);
+    const wasDeleted = await helper.getCacheManager().del(key);
 
     return c.json({
         success: true,
@@ -166,14 +166,14 @@ app.post('/cache-delete-key', async c => {
 
 // Delete all keys from the cache - Use with caution!
 app.post('/cache-delete-all', async c => {
-    await helper.cacheHelper.clear();
+    await helper.getCacheManager().clear();
     return c.json({ success: true });
 });
 
 // Delete all expired keys from the cache
 app.post('/cache-prune', async c => {
     try {
-        const deletedCount = await helper.cacheHelper.prune();
+        const deletedCount = await helper.getCacheManager().prune();
         return c.json({
             success: true,
             deleted: deletedCount
@@ -189,7 +189,7 @@ app.post('/cache-prune', async c => {
 setInterval(
     async () => {
         try {
-            const deleted = await helper.cacheHelper.prune();
+            const deleted = await helper.getCacheManager().prune();
         } catch (e) {
             console.error('[Cache Prune] Failed:', e);
         }
