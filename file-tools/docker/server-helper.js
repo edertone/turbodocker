@@ -6,9 +6,9 @@ const os = require('node:os');
 const Database = require('better-sqlite3');
 
 // Global paths, executables and variables
-const _pdfinfoExecutable = 'pdfinfo';
-const _ghostscriptExecutable = 'gs';
-const _chromeExecutable = 'chromium';
+const PDFINFO_EXECUTABLE = 'pdfinfo';
+const GHOSTSCRIPT_EXECUTABLE = 'gs';
+const CHROME_EXECUTABLE = 'chromium';
 const CACHE_DIR = '/app/file-tools-cache';
 const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
 let _cacheManager = null;
@@ -53,7 +53,7 @@ async function isValidPdf(pdfBuffer) {
     }
     try {
         await new Promise((resolve, reject) => {
-            const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
+            const child = execFile(PDFINFO_EXECUTABLE, ['-'], (error, stdout, stderr) => {
                 if (error) return reject(error);
                 resolve(stdout);
             });
@@ -75,7 +75,7 @@ async function isValidPdf(pdfBuffer) {
 async function countPdfPages(pdfBuffer) {
     try {
         const output = await new Promise((resolve, reject) => {
-            const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
+            const child = execFile(PDFINFO_EXECUTABLE, ['-'], (error, stdout, stderr) => {
                 if (error) return reject(new Error(`Could not determine page count: ${stderr}`));
                 resolve(stdout);
             });
@@ -134,7 +134,7 @@ async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
 
     if (!width || !height) {
         const pdfinfoOutput = await new Promise((resolve, reject) => {
-            const child = execFile(_pdfinfoExecutable, ['-'], (error, stdout, stderr) => {
+            const child = execFile(PDFINFO_EXECUTABLE, ['-'], (error, stdout, stderr) => {
                 if (error) return reject(new Error(`pdfinfo failed: ${stderr || error.message}`));
                 resolve(stdout);
             });
@@ -178,7 +178,7 @@ async function getPdfPageAsJpg(pdfBuffer, pageIndex = 0, options = {}) {
     try {
         const imageBuffer = await new Promise((resolve, reject) => {
             const child = execFile(
-                _ghostscriptExecutable,
+                GHOSTSCRIPT_EXECUTABLE,
                 args,
                 { encoding: null, maxBuffer: 10 * 1024 * 1024 },
                 (err, stdout) => {
@@ -228,7 +228,7 @@ async function convertHtmlToPdf(html) {
         ];
 
         await new Promise((resolve, reject) => {
-            execFile(_chromeExecutable, args, (error, stdout, stderr) => {
+            execFile(CHROME_EXECUTABLE, args, (error, stdout, stderr) => {
                 if (error) return reject(new Error(`PDF generation failed: ${stderr}`));
                 resolve(stdout);
             });
@@ -285,14 +285,12 @@ async function convertImageToJpg(imageBuffer, options = {}) {
     });
 }
 
-
 /**
  * Returns the cache manager object for managing cached files.
  * The first time this is called, database and directories are initialized.
  * @returns {object} cacheManager with methods: set, getFilePath, del, clear, prune
  */
 function getCacheManager() {
-
     // Return existing instance if already initialized
     if (_cacheManager) return _cacheManager;
 
@@ -333,7 +331,6 @@ function getCacheManager() {
     }
 
     _cacheManager = {
-        
         // Set a value in the cache (Streams data to disk, stores metadata in DB)
         set: async (key, buffer, ttlSeconds) => {
             const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
@@ -351,7 +348,9 @@ function getCacheManager() {
 
             // Update DB
             try {
-                const stmt = db.prepare('INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)');
+                const stmt = db.prepare(
+                    'INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)'
+                );
                 stmt.run(key, filename, expiresAt);
             } catch (err) {
                 await fs.unlink(filePath).catch(() => {});
