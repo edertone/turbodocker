@@ -98,16 +98,15 @@ app.post('/html-to-pdf-base64', c => handleHtmlToPdf(c, true));
 // Store a value to the cache
 app.post('/cache-set', async c => {
     const body = await helper.parseBodyVariables(c);
-    const { key, expire } = body;
+    const { namespace, key, expire } = body;
 
-    if (!key) {
-        throw new Error("Missing 'key' in POST body");
-    }
+    if (!namespace) throw new Error("Missing 'namespace' in POST body");
+    if (!key) throw new Error("Missing 'key' in POST body");
 
     const value = await helper.getFileAsBuffer(body, 'value');
 
     // Parse TTL if present (seconds), otherwise undefined (which becomes permanent)
-    await helper.getCacheManager().set(key, value, expire ? parseInt(expire, 10) : undefined);
+    await helper.getCacheManager().set(namespace, key, value, expire ? parseInt(expire, 10) : undefined);
 
     return c.json({ success: true });
 });
@@ -115,16 +114,15 @@ app.post('/cache-set', async c => {
 // Obtain a previously stored value from the cache
 app.post('/cache-get', async c => {
     const body = await helper.parseBodyVariables(c);
-    const { key } = body;
+    const { namespace, key } = body;
 
-    if (!key) {
-        throw new Error("Missing 'key' in POST body");
-    }
+    if (!namespace) throw new Error("Missing 'namespace' in POST body");
+    if (!key) throw new Error("Missing 'key' in POST body");
 
-    const filePath = helper.getCacheManager().getFilePath(key);
+    const filePath = helper.getCacheManager().getFilePath(namespace, key);
 
     if (!filePath) {
-        return c.json({ error: 'Key not found or expired' }, 404);
+        return c.json({ error: 'Key not found in specified namespace or has expired' }, 404);
     }
 
     // Return stream - Extremely memory efficient
@@ -149,18 +147,31 @@ app.post('/cache-get', async c => {
 // Delete a key and its value from the cache
 app.post('/cache-delete-key', async c => {
     const body = await helper.parseBodyVariables(c);
-    const { key } = body;
+    const { namespace, key } = body;
 
-    if (!key) {
-        throw new Error("Missing 'key' in POST body");
-    }
+    if (!namespace) throw new Error("Missing 'namespace' in POST body");
+    if (!key) throw new Error("Missing 'key' in POST body");
 
     // Capture the boolean result from the helper
-    const wasDeleted = await helper.getCacheManager().del(key);
+    const wasDeleted = await helper.getCacheManager().del(namespace, key);
 
     return c.json({
         success: true,
         deleted: wasDeleted
+    });
+});
+
+// Clear an entire namespace
+app.post('/cache-clear-namespace', async c => {
+    const body = await helper.parseBodyVariables(c);
+    const { namespace } = body;
+
+    if (!namespace) throw new Error("Missing 'namespace' in POST body");
+    const deletedCount = await helper.getCacheManager().clearNamespace(namespace);
+
+    return c.json({
+        success: true,
+        deleted: deletedCount
     });
 });
 
