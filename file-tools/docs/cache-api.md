@@ -2,23 +2,28 @@
 
 ## Cache API endpoints documentation
 
-The cache is implemented using a high-performance hybrid system: **SQLite** is used for metadata and TTL (Time-To-Live) management, while the actual data is stored as **flat files** on the disk. This architecture ensures low RAM usage (via streaming) and prevents locking issues during high concurrency. Also the file performance is very fast cause linux uses ram to cache most read files.
+The cache is implemented using a high-performance hybrid system: **SQLite** is used for metadata and TTL (Time-To-Live) management, while the actual data is stored as **flat files** on the disk.
 
-**Persistence:** The data is stored inside `/app/file-tools-cache`. To persist the cache between container restarts, ensure this directory is mounted as a volume.
+**Key Features:**
+
+- **Namespaces:** Data is logically separated into namespaces (e.g., `product-images`, `temp-pdf`). Each namespace gets its own subfolder on the disk, ensuring high performance even with large numbers of files.
+- **Low Memory Usage:** Files are streamed directly to/from the disk preventing RAM spikes.
+- **Persistence:** The data is stored inside `/app/file-tools-cache`. To persist the cache between container restarts, ensure this directory is mounted as a volume.
 
 ## Index
 
 - [/cache-set (Save a value to the cache)](#cache-set)
 - [/cache-get (Obtain a value from the cache)](#cache-get)
 - [/cache-delete-key (Delete a value from the cache)](#cache-delete-key)
-- [/cache-prune (Manually clean expired values from the cache)](#cache-prune)
-- [/cache-delete-all (Erase all data from the cache)](#cache-delete-all)
+- [/cache-clear-namespace (Empty a specific namespace)](#cache-clear-namespace)
+- [/cache-prune (Manually clean expired values)](#cache-prune)
+- [/cache-delete-all (Erase all data globally)](#cache-delete-all)
 
 ---
 
 ### /cache-set
 
-Stores a value in the cache with a given key and an optional expiration time. The input is streamed directly to disk, making it highly efficient for large files (PDFs, Images) as well as text strings.
+Stores a value in the cache within a specific namespace. The input is streamed directly to a subfolder on the disk defined by the namespace.
 
 **Method:** `POST`
 
@@ -26,9 +31,11 @@ Stores a value in the cache with a given key and an optional expiration time. Th
 
 **Parameters:**
 
-- `key` (string): The unique key for the cache entry.
-- `value` (file/string): The value to store.
-- `expire` (optional - integer): The expiration time in seconds. If omitted, the item does not expire automatically.
+- **`namespace`** (string, **required**): The logical group for this item.
+    - _Allowed characters:_ Alphanumeric, underscores (`_`), and hyphens (`-`) only.
+- **`key`** (string, **required**): The unique identifier for the entry _within_ that namespace.
+- `value` (file/string, **required**): The data to store.
+- `expire` (integer, optional): The expiration time in seconds. If omitted, the item does not expire automatically.
 
 **Response:**
 
@@ -45,9 +52,10 @@ const FormData = require('form-data');
 const fs = require('fs');
 
 const form = new FormData();
-form.append('key', 'my-file-key');
+form.append('namespace', 'product-images');
+form.append('key', 'product-123-thumb');
 // You can append a file stream or a simple string
-form.append('value', fs.createReadStream('./document.pdf'));
+form.append('value', fs.createReadStream('./image.jpg'));
 form.append('expire', '3600'); // Expire in 1 hour
 
 const response = await fetch('http://localhost:5001/cache-set', {
@@ -62,7 +70,7 @@ console.log('Set cache success:', result.success);
 
 ### /cache-get
 
-Retrieves a value from the cache using its key. The server streams the file directly from the disk to the response, ensuring minimal memory usage on the server side.
+Retrieves a value from the cache. The server streams the file directly from the namespace's folder to the response.
 
 **Method:** `POST`
 
@@ -70,7 +78,8 @@ Retrieves a value from the cache using its key. The server streams the file dire
 
 **Parameters:**
 
-- `key` (string): The key of the cache entry to retrieve.
+- **`namespace`** (string, **required**): The namespace where the key is stored.
+- **`key`** (string, **required**): The key of the cache entry to retrieve.
 
 **Response:**
 
@@ -83,23 +92,20 @@ Retrieves a value from the cache using its key. The server streams the file dire
 const response = await fetch('http://localhost:5001/cache-get', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'my-file-key' })
+    body: JSON.stringify({
+        namespace: 'product-images',
+        key: 'product-123-thumb'
+    })
 });
 
 if (response.ok) {
     // HTTP 200: We got the binary data back
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    // Example: Write the buffer back to a file
-    require('fs').writeFileSync('./retrieved-document.pdf', buffer);
+    require('fs').writeFileSync('./retrieved-image.jpg', buffer);
     console.log('File retrieved from cache');
 } else if (response.status === 404) {
-    // HTTP 404: Key not found or expired
-    console.log('Cache miss: Key not found');
-} else {
-    // Other errors
-    console.error('Error:', response.status);
+    console.log('Cache miss: Key not found or expired');
 }
 ```
 
@@ -107,7 +113,7 @@ if (response.ok) {
 
 ### /cache-delete-key
 
-Removes a specific value from the cache using its key. This deletes both the metadata record and the physical file from the disk.
+Removes a specific value from a specific namespace. This deletes the metadata record and the physical file.
 
 **Method:** `POST`
 
@@ -115,7 +121,8 @@ Removes a specific value from the cache using its key. This deletes both the met
 
 **Parameters:**
 
-- `key` (string): The key of the cache entry to remove.
+- **`namespace`** (string, **required**): The namespace containing the key.
+- **`key`** (string, **required**): The key to remove.
 
 **Response:**
 
@@ -126,25 +133,63 @@ Removes a specific value from the cache using its key. This deletes both the met
 }
 ```
 
-- `deleted`: `true` if the key existed and was removed, `false` if the key did not exist.
-
 **Example (Node.js):**
 
 ```javascript
 const response = await fetch('http://localhost:5001/cache-delete-key', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: 'my-file-key' })
+    body: JSON.stringify({
+        namespace: 'product-images',
+        key: 'product-123-thumb'
+    })
 });
 const result = await response.json();
-console.log('Success:', result.success, 'Was deleted:', result.deleted);
+console.log('Was deleted:', result.deleted);
+```
+
+---
+
+### /cache-clear-namespace
+
+Completely removes **all** keys and files associated with a specific namespace. This is highly efficient as it removes the entire directory for that namespace at once. Other namespaces remain untouched.
+
+**Method:** `POST`
+
+**Content-Type:** `application/json`
+
+**Parameters:**
+
+- **`namespace`** (string, **required**): The namespace to wipe.
+
+**Response:**
+
+```json
+{
+    "success": true,
+    "deleted": 150
+}
+```
+
+_`deleted` represents the number of database records removed._
+
+**Example (Node.js):**
+
+```javascript
+const response = await fetch('http://localhost:5001/cache-clear-namespace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ namespace: 'product-images' })
+});
+const result = await response.json();
+console.log(`Namespace cleared. ${result.deleted} items removed.`);
 ```
 
 ---
 
 ### /cache-prune
 
-Manually triggers the background cleanup process. This identifies items where the TTL has expired, removes them from the database, and deletes the associated files from the disk.
+Manually triggers the background cleanup process. This scans **all namespaces** for items where the TTL has expired and removes them to free up disk space.
 
 _Note: This process also runs automatically in the background every 2 hours._
 
@@ -161,8 +206,6 @@ _Note: This process also runs automatically in the background every 2 hours._
 }
 ```
 
-- `deleted`: An integer representing the count of items that were removed.
-
 **Example (Node.js):**
 
 ```javascript
@@ -170,14 +213,14 @@ const response = await fetch('http://localhost:5001/cache-prune', {
     method: 'POST'
 });
 const result = await response.json();
-console.log('Prune complete. Items removed:', result.deleted);
+console.log('Prune complete. Total items removed:', result.deleted);
 ```
 
 ---
 
 ### /cache-delete-all
 
-Removes **all** values from the cache. Use with caution, as this will immediately wipe the database and delete all files in the cache directory.
+Removes **EVERYTHING** from the cache. This wipes the database and deletes the entire storage directory structure, including all namespaces. Use with extreme caution.
 
 **Method:** `POST`
 
@@ -199,9 +242,8 @@ None
 
 ```javascript
 const response = await fetch('http://localhost:5001/cache-delete-all', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    method: 'POST'
 });
 const result = await response.json();
-console.log('Cache clear all success:', result.success);
+console.log('Total cache wipe success:', result.success);
 ```

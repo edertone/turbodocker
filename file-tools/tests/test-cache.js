@@ -58,6 +58,7 @@ async function makeRequest(path, data, isMultipart = false) {
 describe('Cache API', function () {
     this.timeout(5000);
 
+    const testNamespace = 'test-ns-main';
     const testKey = 'test-key';
     const testValue = 'Hello, World!';
 
@@ -67,26 +68,37 @@ describe('Cache API', function () {
 
     it('should set and get a value from cache', async function () {
         // Set value
-        const setResult = await makeRequest('/cache-set', { key: testKey, value: testValue }, true);
+        const setResult = await makeRequest(
+            '/cache-set',
+            { namespace: testNamespace, key: testKey, value: testValue },
+            true
+        );
         assert.strictEqual(setResult.statusCode, 200, 'Expected HTTP 200 for set');
         assert.deepStrictEqual(setResult.body, { success: true }, 'Expected success message for set');
 
         // Get value
-        const getResult = await makeRequest('/cache-get', { key: testKey });
+        const getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: testKey });
         assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200 for get');
         assert.strictEqual(getResult.body.toString(), testValue, 'Expected to get the set value back');
     });
 
+    it('should fail with invalid namespace characters', async function () {
+        // Test with invalid characters like slashes or dots
+        const setResult = await makeRequest('/cache-set', { namespace: '../hack', key: 'hack', value: 'val' }, true);
+        assert.strictEqual(setResult.statusCode, 400, 'Expected HTTP 400 for invalid namespace');
+        assert(setResult.body.error.includes('Invalid namespace'), 'Expected invalid namespace error');
+    });
+
     it('should clear an existing key from cache', async function () {
         // Set value first
-        await makeRequest('/cache-set', { key: testKey, value: testValue }, true);
+        await makeRequest('/cache-set', { namespace: testNamespace, key: testKey, value: testValue }, true);
 
         // Confirm key exists
-        let getResult = await makeRequest('/cache-get', { key: testKey });
+        let getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: testKey });
         assert.strictEqual(getResult.body.toString(), testValue, 'Expected value to be set before clear');
 
         // Clear the key
-        const clearResult = await makeRequest('/cache-delete-key', { key: testKey });
+        const clearResult = await makeRequest('/cache-delete-key', { namespace: testNamespace, key: testKey });
         assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear');
         assert.deepStrictEqual(
             clearResult.body,
@@ -95,12 +107,15 @@ describe('Cache API', function () {
         );
 
         // Confirm key is gone
-        getResult = await makeRequest('/cache-get', { key: testKey });
+        getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: testKey });
         assert.strictEqual(getResult.statusCode, 404, 'Expected HTTP 404 after clear');
     });
 
     it('should return deleted: false for non-existent key', async function () {
-        const clearResult = await makeRequest('/cache-delete-key', { key: 'non-existent-key-2' });
+        const clearResult = await makeRequest('/cache-delete-key', {
+            namespace: testNamespace,
+            key: 'non-existent-key-2'
+        });
         assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear non-existent');
         assert.deepStrictEqual(
             clearResult.body,
@@ -110,7 +125,7 @@ describe('Cache API', function () {
     });
 
     it('should return error if key is missing for clear', async function () {
-        const clearResult = await makeRequest('/cache-delete-key', {});
+        const clearResult = await makeRequest('/cache-delete-key', { namespace: testNamespace });
         assert.strictEqual(clearResult.statusCode, 400, 'Expected HTTP 400 for missing key');
         assert(
             clearResult.body.error && clearResult.body.error.includes('Missing'),
@@ -118,8 +133,17 @@ describe('Cache API', function () {
         );
     });
 
+    it('should return error if namespace is missing for clear', async function () {
+        const clearResult = await makeRequest('/cache-delete-key', { key: 'some-key' });
+        assert.strictEqual(clearResult.statusCode, 400, 'Expected HTTP 400 for missing namespace');
+        assert(
+            clearResult.body.error && clearResult.body.error.includes('Missing'),
+            'Expected error message for missing namespace'
+        );
+    });
+
     it('should return 404 for a non-existent key', async function () {
-        const getResult = await makeRequest('/cache-get', { key: 'non-existent-key' });
+        const getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: 'non-existent-key' });
 
         assert.strictEqual(getResult.statusCode, 404, 'Expected HTTP 404');
         assert(getResult.body.error, 'Expected error message in body');
@@ -132,21 +156,51 @@ describe('Cache API', function () {
         const expireSeconds = 2;
 
         // Set value with expiration
-        await makeRequest('/cache-set', { key: expiringKey, value: expiringValue, expire: expireSeconds }, true);
+        await makeRequest(
+            '/cache-set',
+            {
+                namespace: testNamespace,
+                key: expiringKey,
+                value: expiringValue,
+                expire: expireSeconds
+            },
+            true
+        );
 
         // Wait for the key to expire
         await new Promise(resolve => setTimeout(resolve, expireSeconds * 1000 + 500));
 
         // Try to get the expired value
-        const getResult = await makeRequest('/cache-get', { key: expiringKey });
+        const getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: expiringKey });
         assert.strictEqual(getResult.statusCode, 404, 'Expected HTTP 404 for expired key');
     });
 
-    it('should clear all keys from cache', async function () {
-        // Set multiple keys
-        await makeRequest('/cache-set', { key: 'key1', value: 'value1' }, true);
-        await makeRequest('/cache-set', { key: 'key2', value: 'value2' }, true);
-        await makeRequest('/cache-set', { key: 'key3', value: 'value3' }, true);
+    it('should clear an entire namespace without affecting others', async function () {
+        const nsToDelete = 'ns-delete-me';
+        const nsToKeep = 'ns-keep-me';
+
+        // 1. Set keys in both namespaces
+        await makeRequest('/cache-set', { namespace: nsToDelete, key: 'k1', value: 'v1' }, true);
+        await makeRequest('/cache-set', { namespace: nsToKeep, key: 'k2', value: 'v2' }, true);
+
+        // 2. Clear only one namespace
+        const clearNsResult = await makeRequest('/cache-clear-namespace', { namespace: nsToDelete });
+        assert.strictEqual(clearNsResult.statusCode, 200);
+        assert.deepStrictEqual(clearNsResult.body, { success: true, deleted: 1 });
+
+        // 3. Verify keys in deleted namespace are gone
+        const getDeleted = await makeRequest('/cache-get', { namespace: nsToDelete, key: 'k1' });
+        assert.strictEqual(getDeleted.statusCode, 404, 'Key in cleared namespace should be gone');
+
+        // 4. Verify keys in kept namespace are still there
+        const getKept = await makeRequest('/cache-get', { namespace: nsToKeep, key: 'k2' });
+        assert.strictEqual(getKept.statusCode, 200, 'Key in other namespace should remain');
+    });
+
+    it('should clear all keys from cache (global clear)', async function () {
+        // Set multiple keys in different namespaces
+        await makeRequest('/cache-set', { namespace: 'ns1', key: 'key1', value: 'value1' }, true);
+        await makeRequest('/cache-set', { namespace: 'ns2', key: 'key2', value: 'value2' }, true);
 
         // Clear all keys
         const clearAllResult = await makeRequest('/cache-delete-all', {});
@@ -154,12 +208,10 @@ describe('Cache API', function () {
         assert.deepStrictEqual(clearAllResult.body, { success: true }, 'Expected success message for clear all');
 
         // Confirm all keys are gone
-        let get1 = await makeRequest('/cache-get', { key: 'key1' });
-        let get2 = await makeRequest('/cache-get', { key: 'key2' });
-        let get3 = await makeRequest('/cache-get', { key: 'key3' });
+        let get1 = await makeRequest('/cache-get', { namespace: 'ns1', key: 'key1' });
+        let get2 = await makeRequest('/cache-get', { namespace: 'ns2', key: 'key2' });
         assert.strictEqual(get1.statusCode, 404, 'Expected key1 to be cleared');
         assert.strictEqual(get2.statusCode, 404, 'Expected key2 to be cleared');
-        assert.strictEqual(get3.statusCode, 404, 'Expected key3 to be cleared');
     });
 
     it('should save and retrieve a PDF file from cache', async function () {
@@ -172,6 +224,7 @@ describe('Cache API', function () {
         const setResult = await makeRequest(
             '/cache-set',
             {
+                namespace: testNamespace,
                 key: cacheKey,
                 value: {
                     buffer: originalPdfBuffer,
@@ -184,7 +237,7 @@ describe('Cache API', function () {
         assert.strictEqual(setResult.statusCode, 200, 'Expected HTTP 200 for set');
 
         // Retrieve the PDF file from cache
-        const getResult = await makeRequest('/cache-get', { key: cacheKey });
+        const getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: cacheKey });
         assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200 for get');
 
         fs.writeFileSync(path.join(OUT_DIR, 'sample30.pdf'), getResult.body);
@@ -198,7 +251,7 @@ describe('Cache API', function () {
         );
 
         // Clear the key
-        const clearResult = await makeRequest('/cache-delete-key', { key: cacheKey });
+        const clearResult = await makeRequest('/cache-delete-key', { namespace: testNamespace, key: cacheKey });
         assert.strictEqual(clearResult.statusCode, 200, 'Expected HTTP 200 for clear');
         assert.deepStrictEqual(
             clearResult.body,
@@ -207,7 +260,7 @@ describe('Cache API', function () {
         );
 
         // Confirm key is gone
-        const getResult2 = await makeRequest('/cache-get', { key: cacheKey });
+        const getResult2 = await makeRequest('/cache-get', { namespace: testNamespace, key: cacheKey });
         assert.strictEqual(getResult2.statusCode, 404, 'Expected HTTP 404 after clear');
     });
 
@@ -222,6 +275,7 @@ describe('Cache API', function () {
         await makeRequest(
             '/cache-set',
             {
+                namespace: testNamespace,
                 key: keyExpired,
                 value: 'I will die',
                 expire: expireSeconds
@@ -233,6 +287,7 @@ describe('Cache API', function () {
         await makeRequest(
             '/cache-set',
             {
+                namespace: testNamespace,
                 key: keyValid,
                 value: 'I will survive',
                 expire: 10
@@ -250,11 +305,11 @@ describe('Cache API', function () {
         assert.deepStrictEqual(pruneResult.body, { success: true, deleted: 1 }, 'Expected exactly 1 item to be pruned');
 
         // 5. Verify the expired key is gone (404)
-        const getExpired = await makeRequest('/cache-get', { key: keyExpired });
+        const getExpired = await makeRequest('/cache-get', { namespace: testNamespace, key: keyExpired });
         assert.strictEqual(getExpired.statusCode, 404, 'Expired key should be not found');
 
         // 6. Verify the valid key is still there (200)
-        const getValid = await makeRequest('/cache-get', { key: keyValid });
+        const getValid = await makeRequest('/cache-get', { namespace: testNamespace, key: keyValid });
         assert.strictEqual(getValid.statusCode, 200, 'Valid key should still exist');
         assert.strictEqual(getValid.body.toString(), 'I will survive');
     });

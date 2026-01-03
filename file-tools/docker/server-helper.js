@@ -1,4 +1,4 @@
-const { execFile } = require('node:child_process');
+const { execFile, spawn } = require('node:child_process');
 const { promises: fs, mkdirSync, existsSync } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -11,6 +11,7 @@ const GHOSTSCRIPT_EXECUTABLE = 'gs';
 const CHROME_EXECUTABLE = 'chromium';
 const CACHE_DIR = '/app/file-tools-cache';
 const BLOB_DIR = path.join(CACHE_DIR, 'blobs');
+
 let _cacheManager = null;
 
 /**
@@ -254,7 +255,6 @@ async function convertImageToJpg(imageBuffer, options = {}) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
     }
 
-    const { spawn } = require('node:child_process');
     return await new Promise((resolve, reject) => {
         const args = [
             '-', // read from stdin
@@ -286,9 +286,20 @@ async function convertImageToJpg(imageBuffer, options = {}) {
 }
 
 /**
+ * Private helper to validate namespace strings.
+ * Ensures the namespace is safe to use as a directory name.
+ * @param {string} namespace
+ */
+function validateCacheNamespace(namespace) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(namespace)) {
+        throw new Error('Invalid namespace. Only letters, numbers, underscores, and hyphens allowed.');
+    }
+}
+
+/**
  * Returns the cache manager object for managing cached files.
  * The first time this is called, database and directories are initialized.
- * @returns {object} cacheManager with methods: set, getFilePath, del, clear, prune
+ * @returns {object} cacheManager with methods: set, getFilePath, del, clear, clearNamespace, prune
  */
 function getCacheManager() {
     // Return existing instance if already initialized
@@ -316,12 +327,14 @@ function getCacheManager() {
         // WAL mode allows better concurrency and prevents locking issues
         db.pragma('journal_mode = WAL');
 
-        // Create table: key, data (BLOB), expires_at (Timestamp in ms)
+        // Create table: namespace, key, data (BLOB), expires_at (Timestamp in ms)
         db.exec(`
             CREATE TABLE IF NOT EXISTS file_cache (
-                key TEXT PRIMARY KEY,
-                filename TEXT,
-                expires_at INTEGER
+                namespace TEXT NOT NULL,
+                key TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                expires_at INTEGER,
+                PRIMARY KEY (namespace, key)
             );
             CREATE INDEX IF NOT EXISTS idx_expires_at ON file_cache(expires_at);
         `);
@@ -332,26 +345,37 @@ function getCacheManager() {
 
     _cacheManager = {
         // Set a value in the cache (Streams data to disk, stores metadata in DB)
-        set: async (key, buffer, ttlSeconds) => {
+        set: async (namespace, key, buffer, ttlSeconds) => {
+            validateCacheNamespace(namespace);
+
             const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
 
-            // CHECK FOR EXISTING KEY to avoid orphan files
-            const existing = db.prepare('SELECT filename FROM file_cache WHERE key = ?').get(key);
+            // CHECK FOR EXISTING KEY in this namespace to avoid orphan files
+            const existing = db
+                .prepare('SELECT filename FROM file_cache WHERE namespace = ? AND key = ?')
+                .get(namespace, key);
             if (existing) {
-                await fs.unlink(path.join(BLOB_DIR, existing.filename)).catch(() => {});
+                // Delete existing file at: blobs/namespace/filename
+                await fs.unlink(path.join(BLOB_DIR, namespace, existing.filename)).catch(() => {});
             }
 
-            // Generate file
+            // Create namespace directory if it doesn't exist
+            const namespaceDir = path.join(BLOB_DIR, namespace);
+            if (!existsSync(namespaceDir)) {
+                await fs.mkdir(namespaceDir, { recursive: true });
+            }
+
+            // Generate file path
             const filename = crypto.randomUUID();
-            const filePath = path.join(BLOB_DIR, filename);
+            const filePath = path.join(namespaceDir, filename);
             await fs.writeFile(filePath, buffer);
 
             // Update DB
             try {
                 const stmt = db.prepare(
-                    'INSERT OR REPLACE INTO file_cache (key, filename, expires_at) VALUES (?, ?, ?)'
+                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, expires_at) VALUES (?, ?, ?, ?)'
                 );
-                stmt.run(key, filename, expiresAt);
+                stmt.run(namespace, key, filename, expiresAt);
             } catch (err) {
                 await fs.unlink(filePath).catch(() => {});
                 throw err;
@@ -359,45 +383,70 @@ function getCacheManager() {
         },
 
         // Get a value path. (Returns the filepath, NOT the buffer)
-        getFilePath: key => {
+        getFilePath: (namespace, key) => {
+            validateCacheNamespace(namespace);
+
             const now = Date.now();
-            const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ? AND expires_at > ?');
-            const row = stmt.get(key, now);
+            const stmt = db.prepare(
+                'SELECT filename FROM file_cache WHERE namespace = ? AND key = ? AND expires_at > ?'
+            );
+            const row = stmt.get(namespace, key, now);
 
             if (!row) return undefined;
 
-            const filePath = path.join(BLOB_DIR, row.filename);
+            // Construct path: blobs/namespace/filename
+            const filePath = path.join(BLOB_DIR, namespace, row.filename);
             if (!existsSync(filePath)) return undefined; // Edge case: file deleted manually
 
             return filePath;
         },
 
         // Delete a key from the cache. Returns true if deleted, false if not found.
-        del: async key => {
-            const stmt = db.prepare('SELECT filename FROM file_cache WHERE key = ?');
-            const row = stmt.get(key);
+        del: async (namespace, key) => {
+            validateCacheNamespace(namespace);
+
+            const stmt = db.prepare('SELECT filename FROM file_cache WHERE namespace = ? AND key = ?');
+            const row = stmt.get(namespace, key);
 
             if (row) {
-                db.prepare('DELETE FROM file_cache WHERE key = ?').run(key);
-                await fs.unlink(path.join(BLOB_DIR, row.filename)).catch(() => {});
+                db.prepare('DELETE FROM file_cache WHERE namespace = ? AND key = ?').run(namespace, key);
+                // Delete file at: blobs/namespace/filename
+                await fs.unlink(path.join(BLOB_DIR, namespace, row.filename)).catch(() => {});
                 return true;
             }
             return false;
         },
 
-        // Clear the entire cache
-        clear: async () => {
-            db.exec('DELETE FROM file_cache');
-            // Delete all files in blob directory
-            const files = await fs.readdir(BLOB_DIR);
-            await Promise.all(files.map(f => fs.unlink(path.join(BLOB_DIR, f)).catch(() => {})));
+        // Delete all keys belonging to a specific namespace
+        clearNamespace: async namespace => {
+            validateCacheNamespace(namespace);
+
+            // Efficiently clear: Delete DB rows first
+            const info = db.prepare('DELETE FROM file_cache WHERE namespace = ?').run(namespace);
+
+            // Then recursively delete the entire folder for that namespace
+            // This is much faster than deleting files one by one
+            const namespaceDir = path.join(BLOB_DIR, namespace);
+            await fs.rm(namespaceDir, { recursive: true, force: true }).catch(() => {});
+
+            return info.changes;
         },
 
-        // Prune expired cache entries
+        // Clear the entire cache (All namespaces)
+        clear: async () => {
+            db.exec('DELETE FROM file_cache');
+            // Delete the whole blobs folder and recreate it
+            await fs.rm(BLOB_DIR, { recursive: true, force: true }).catch(() => {});
+            if (!existsSync(BLOB_DIR)) {
+                mkdirSync(BLOB_DIR, { recursive: true });
+            }
+        },
+
+        // Prune expired cache entries (Global, across all namespaces)
         prune: async () => {
             const now = Date.now();
             // Find expired files
-            const stmt = db.prepare('SELECT filename FROM file_cache WHERE expires_at <= ?');
+            const stmt = db.prepare('SELECT namespace, filename FROM file_cache WHERE expires_at <= ?');
             const rows = stmt.all(now);
 
             if (rows.length === 0) return 0;
@@ -405,11 +454,10 @@ function getCacheManager() {
             // Delete from DB
             db.prepare('DELETE FROM file_cache WHERE expires_at <= ?').run(now);
 
-            // Delete files from Disk (in background, don't wait)
+            // Delete files from Disk
             rows.forEach(row => {
-                fs.unlink(path.join(BLOB_DIR, row.filename)).catch(e =>
-                    console.error(`Failed to delete ${row.filename}`, e)
-                );
+                const filePath = path.join(BLOB_DIR, row.namespace, row.filename);
+                fs.unlink(filePath).catch(e => console.error(`Failed to delete ${filePath}`, e));
             });
 
             return rows.length;
