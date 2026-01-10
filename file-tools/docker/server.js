@@ -119,29 +119,40 @@ app.post('/cache-get', async c => {
     if (!namespace) throw new Error("Missing 'namespace' in POST body");
     if (!key) throw new Error("Missing 'key' in POST body");
 
-    const filePath = helper.getCacheManager().getFilePath(namespace, key);
+    const entry = helper.getCacheManager().getEntry(namespace, key);
 
-    if (!filePath) {
+    if (!entry) {
         return c.json({ error: 'Key not found in specified namespace or has expired' }, 404);
     }
 
-    // Return stream - Extremely memory efficient
-    return stream(
-        c,
-        async stream => {
-            try {
-                const fileStream = createReadStream(filePath);
-                for await (const chunk of fileStream) {
-                    await stream.write(chunk);
+    // CASE 1: Data stored directly in DB (Buffer)
+    if (entry.type === 'buffer') {
+        return c.body(entry.data, 200, {
+            'Content-Type': 'application/octet-stream'
+        });
+    }
+
+    // CASE 2: Data stored on Disk (File Stream)
+    if (entry.type === 'file') {
+        return stream(
+            c,
+            async stream => {
+                try {
+                    const fileStream = createReadStream(entry.path);
+                    for await (const chunk of fileStream) {
+                        await stream.write(chunk);
+                    }
+                } catch (err) {
+                    console.error(`Error streaming file ${entry.path}:`, err);
                 }
-            } catch (err) {
-                console.error(`Error streaming file ${filePath}:`, err);
+            },
+            {
+                headers: { 'Content-Type': 'application/octet-stream' }
             }
-        },
-        {
-            headers: { 'Content-Type': 'application/octet-stream' }
-        }
-    );
+        );
+    }
+
+    return c.json({ error: 'Storage retrieval error' }, 500);
 });
 
 // Delete a key and its value from the cache
@@ -152,7 +163,6 @@ app.post('/cache-delete-key', async c => {
     if (!namespace) throw new Error("Missing 'namespace' in POST body");
     if (!key) throw new Error("Missing 'key' in POST body");
 
-    // Capture the boolean result from the helper
     const wasDeleted = await helper.getCacheManager().del(namespace, key);
 
     return c.json({
@@ -196,11 +206,11 @@ app.post('/cache-prune', async c => {
 });
 
 // AUTOMATIC CACHE CLEANUP
-// Run a prune job every 2 hours to remove expired items from the DB file
+// Run a prune job every 2 hours to remove expired items
 setInterval(
     async () => {
         try {
-            const deleted = await helper.getCacheManager().prune();
+            await helper.getCacheManager().prune();
         } catch (e) {
             console.error('[Cache Prune] Failed:', e);
         }

@@ -250,7 +250,6 @@ async function convertHtmlToPdf(html) {
  */
 async function convertImageToJpg(imageBuffer, options = {}) {
     const { jpegQuality = 75, transparentColor = '#FFFFFF' } = options;
-
     if (!Number.isInteger(jpegQuality) || jpegQuality < 1 || jpegQuality > 100) {
         throw new Error('JPEG quality must be an integer between 1 and 100');
     }
@@ -271,7 +270,6 @@ async function convertImageToJpg(imageBuffer, options = {}) {
 
         magick.stdout.on('data', data => stdoutBuffers.push(data));
         magick.stderr.on('data', data => stderrBuffers.push(data));
-
         magick.on('error', err => reject(new Error(`Failed to start ImageMagick: ${err.message}`)));
         magick.on('close', code => {
             if (code !== 0) {
@@ -322,17 +320,21 @@ function getCacheManager() {
 
     // Initialize SQLite database
     let db;
-    try {
+    try {        
+        // WAL mode allows better concurrency and prevents locking issues.
+        // Performance optimizations for our use case.
         db = new Database(path.join(CACHE_DIR, 'file-tools-cache.db'));
-        // WAL mode allows better concurrency and prevents locking issues
         db.pragma('journal_mode = WAL');
+        db.pragma('synchronous = NORMAL');
+        db.pragma('page_size = 16384');
 
-        // Create table: namespace, key, data (BLOB), expires_at (Timestamp in ms)
+        // Create table: namespace, key, filename, data, expires_at (Timestamp in ms)
         db.exec(`
             CREATE TABLE IF NOT EXISTS file_cache (
                 namespace TEXT NOT NULL,
                 key TEXT NOT NULL,
-                filename TEXT NOT NULL,
+                filename TEXT,   -- Nullable (used for disk files > 100KB)
+                data BLOB,       -- Nullable (used for inline storage <= 100KB)
                 expires_at INTEGER,
                 PRIMARY KEY (namespace, key)
             );
@@ -347,71 +349,78 @@ function getCacheManager() {
         // Set a value in the cache (Streams data to disk, stores metadata in DB)
         set: async (namespace, key, buffer, ttlSeconds) => {
             validateCacheNamespace(namespace);
-
             const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
+            const size = buffer.length;
 
-            // CHECK FOR EXISTING KEY in this namespace to avoid orphan files
+            // Clean up potentially existing entry (and its file if it exists)
             const existing = db
                 .prepare('SELECT filename FROM file_cache WHERE namespace = ? AND key = ?')
                 .get(namespace, key);
-            if (existing) {
-                // Delete existing file at: blobs/namespace/filename
+
+            if (existing && existing.filename) {
                 await fs.unlink(path.join(BLOB_DIR, namespace, existing.filename)).catch(() => {});
             }
 
-            // Create namespace directory if it doesn't exist
-            const namespaceDir = path.join(BLOB_DIR, namespace);
-            if (!existsSync(namespaceDir)) {
-                await fs.mkdir(namespaceDir, { recursive: true });
-            }
-
-            // Generate file path
-            const filename = crypto.randomUUID();
-            const filePath = path.join(namespaceDir, filename);
-            await fs.writeFile(filePath, buffer);
-
-            // Update DB
-            try {
+            // 100KB is the scientific "sweet spot" where SQLite outperforms the filesystem.
+            if (size <= 100 * 1024) {
+                // STRATEGY A: Inline Storage (DB) - Efficient for < 100KB
                 const stmt = db.prepare(
-                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, expires_at) VALUES (?, ?, ?, ?)'
+                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, data, expires_at) VALUES (?, ?, NULL, ?, ?)'
+                );
+                stmt.run(namespace, key, buffer, expiresAt);
+            } else {
+                // STRATEGY B: Disk Storage (File) - Efficient for > 100KB
+                const namespaceDir = path.join(BLOB_DIR, namespace);
+                if (!existsSync(namespaceDir)) {
+                    await fs.mkdir(namespaceDir, { recursive: true });
+                }
+
+                // Generate file path
+                const filename = crypto.randomUUID();
+                const filePath = path.join(namespaceDir, filename);
+                await fs.writeFile(filePath, buffer);
+
+                const stmt = db.prepare(
+                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, data, expires_at) VALUES (?, ?, ?, NULL, ?)'
                 );
                 stmt.run(namespace, key, filename, expiresAt);
-            } catch (err) {
-                await fs.unlink(filePath).catch(() => {});
-                throw err;
             }
         },
 
-        // Get a value path. (Returns the filepath, NOT the buffer)
-        getFilePath: (namespace, key) => {
+        // Retrieve a cache entry's metadata and data source
+        getEntry: (namespace, key) => {
             validateCacheNamespace(namespace);
-
             const now = Date.now();
-            const stmt = db.prepare(
-                'SELECT filename FROM file_cache WHERE namespace = ? AND key = ? AND expires_at > ?'
-            );
-            const row = stmt.get(namespace, key, now);
+            const row = db
+                .prepare('SELECT filename, data FROM file_cache WHERE namespace = ? AND key = ? AND expires_at > ?')
+                .get(namespace, key, now);
 
-            if (!row) return undefined;
+            if (!row) return null;
 
-            // Construct path: blobs/namespace/filename
-            const filePath = path.join(BLOB_DIR, namespace, row.filename);
-            if (!existsSync(filePath)) return undefined; // Edge case: file deleted manually
-
-            return filePath;
+            // Result is either RAM Buffer or File Path
+            if (row.data) {
+                return { type: 'buffer', data: row.data };
+            } else if (row.filename) {
+                const filePath = path.join(BLOB_DIR, namespace, row.filename);
+                // Edge case safety: File might have been manually deleted
+                if (!existsSync(filePath)) return null;
+                return { type: 'file', path: filePath };
+            }
+            return null;
         },
 
         // Delete a key from the cache. Returns true if deleted, false if not found.
         del: async (namespace, key) => {
             validateCacheNamespace(namespace);
-
             const stmt = db.prepare('SELECT filename FROM file_cache WHERE namespace = ? AND key = ?');
             const row = stmt.get(namespace, key);
 
             if (row) {
                 db.prepare('DELETE FROM file_cache WHERE namespace = ? AND key = ?').run(namespace, key);
-                // Delete file at: blobs/namespace/filename
-                await fs.unlink(path.join(BLOB_DIR, namespace, row.filename)).catch(() => {});
+                // Only delete file if filename exists (it will be null for inline blobs)
+                if (row.filename) {
+                    await fs.unlink(path.join(BLOB_DIR, namespace, row.filename)).catch(() => {});
+                }
                 return true;
             }
             return false;
@@ -428,7 +437,6 @@ function getCacheManager() {
             // This is much faster than deleting files one by one
             const namespaceDir = path.join(BLOB_DIR, namespace);
             await fs.rm(namespaceDir, { recursive: true, force: true }).catch(() => {});
-
             return info.changes;
         },
 
@@ -445,19 +453,19 @@ function getCacheManager() {
         // Prune expired cache entries (Global, across all namespaces)
         prune: async () => {
             const now = Date.now();
-            // Find expired files
             const stmt = db.prepare('SELECT namespace, filename FROM file_cache WHERE expires_at <= ?');
             const rows = stmt.all(now);
 
             if (rows.length === 0) return 0;
 
-            // Delete from DB
             db.prepare('DELETE FROM file_cache WHERE expires_at <= ?').run(now);
 
             // Delete files from Disk
             rows.forEach(row => {
-                const filePath = path.join(BLOB_DIR, row.namespace, row.filename);
-                fs.unlink(filePath).catch(e => console.error(`Failed to delete ${filePath}`, e));
+                if (row.filename) {
+                    const filePath = path.join(BLOB_DIR, row.namespace, row.filename);
+                    fs.unlink(filePath).catch(e => console.error(`Failed to delete ${filePath}`, e));
+                }
             });
 
             return rows.length;
