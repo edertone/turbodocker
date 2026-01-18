@@ -24,7 +24,7 @@ spring:
     hibernate:
       ddl-auto: validate
       naming:
-        physical-strategy: com.edertone.turbodepot_api.support.jpa.TurboDepotApiPhysicalNamingStrategy
+        physical-strategy: com.edertone.turbodepot_spring.support.jpa.TurboDepotApiPhysicalNamingStrategy
     properties:
       hibernate:
         show_sql: false
@@ -49,10 +49,3 @@ springdoc:
   api-docs:
     enabled: true
     path: /api-docs
-
-#
-# Application properties
-#
-turbodepot-api:
-  model:
-    table-prefix: usr_
