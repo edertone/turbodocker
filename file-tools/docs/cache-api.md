@@ -83,8 +83,11 @@ Retrieves a value from the cache. The server streams the file directly from the 
 
 **Response:**
 
-- **Found (HTTP 200):** Returns the raw binary data as a stream. `Content-Type` will be `application/octet-stream`.
-- **Not Found (HTTP 404):** Returns a JSON error message. `Content-Type` will be `application/json`.
+- **Found (HTTP 200):**
+    - **Body:** Returns the raw binary data as a stream (`application/octet-stream`).
+    - **Headers:**
+        - `X-Cache-Created-At`: An ISO 8601 timestamp indicating when the cache entry was created.
+- **Not Found (HTTP 404):** Returns a JSON error message (`application/json`).
 
 **Example (Node.js):**
 
@@ -99,13 +102,15 @@ const response = await fetch('http://localhost:5001/cache-get', {
 });
 
 if (response.ok) {
-    // HTTP 200: We got the binary data back
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    require('fs').writeFileSync('./retrieved-image.jpg', buffer);
-    console.log('File retrieved from cache');
-} else if (response.status === 404) {
-    console.log('Cache miss: Key not found or expired');
+    const creationDate = new Date(response.headers.get('x-cache-created-at'));
+    console.log(`Cache entry was created at: ${creationDate.toLocaleString()}`);
+
+    // The body contains the raw file data
+    const imageBuffer = await response.buffer();
+    fs.writeFileSync('retrieved_image.jpg', imageBuffer);
+} else {
+    const error = await response.json();
+    console.error(`Failed to get cache: ${error.message}`);
 }
 ```
 

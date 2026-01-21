@@ -136,11 +136,14 @@ app.post('/cache-get', async c => {
         return c.json({ error: 'Key not found in specified namespace or has expired' }, 404);
     }
 
+    const headers = {
+        'Content-Type': 'application/octet-stream',
+        'X-Cache-Created-At': new Date(entry.createdAt).toISOString()
+    };
+
     // CASE 1: Data stored directly in DB (Buffer)
     if (entry.type === 'buffer') {
-        return c.body(entry.data, 200, {
-            'Content-Type': 'application/octet-stream'
-        });
+        return c.body(entry.data, 200, headers);
     }
 
     // CASE 2: Data stored on Disk (File Stream)
@@ -157,9 +160,7 @@ app.post('/cache-get', async c => {
                     console.error(`Error streaming file ${entry.path}:`, err);
                 }
             },
-            {
-                headers: { 'Content-Type': 'application/octet-stream' }
-            }
+            { headers }
         );
     }
 

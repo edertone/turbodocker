@@ -52,7 +52,8 @@ async function makeRequest(path, data, isMultipart = false) {
     return {
         statusCode: response.status,
         body: responseBody,
-        contentType
+        contentType,
+        headers: response.headers
     };
 }
 
@@ -83,6 +84,13 @@ describe('Cache API', function () {
         const getResult = await makeRequest('/cache-get', { namespace: testNamespace, key: testKey });
         assert.strictEqual(getResult.statusCode, 200, 'Expected HTTP 200 for get');
         assert.strictEqual(getResult.body.toString(), testValue, 'Expected to get the set value back');
+
+        // Verify creation date header
+        const creationHeader = getResult.headers.get('x-cache-created-at');
+        assert(creationHeader, 'Expected x-cache-created-at header to be present');
+        const creationDate = new Date(creationHeader);
+        assert(!isNaN(creationDate.getTime()), 'Expected a valid date in the header');
+        assert(Date.now() - creationDate.getTime() < 5000, 'Expected creation date to be recent');
     });
 
     it('should handle Hybrid Storage correctly (Small vs Large)', async function () {

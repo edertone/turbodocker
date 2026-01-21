@@ -335,6 +335,7 @@ function getCacheManager() {
                 key TEXT NOT NULL,
                 filename TEXT,   -- Nullable (used for disk files > 100KB)
                 data BLOB,       -- Nullable (used for inline storage <= 100KB)
+                created_at INTEGER NOT NULL,
                 expires_at INTEGER,
                 PRIMARY KEY (namespace, key)
             );
@@ -350,6 +351,7 @@ function getCacheManager() {
         set: async (namespace, key, buffer, ttlSeconds) => {
             validateCacheNamespace(namespace);
             const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : Number.MAX_SAFE_INTEGER;
+            const createdAt = Date.now();
             const size = buffer.length;
 
             // Clean up potentially existing entry (and its file if it exists)
@@ -365,9 +367,9 @@ function getCacheManager() {
             if (size <= 100 * 1024) {
                 // STRATEGY A: Inline Storage (DB) - Efficient for < 100KB
                 const stmt = db.prepare(
-                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, data, expires_at) VALUES (?, ?, NULL, ?, ?)'
+                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, data, created_at, expires_at) VALUES (?, ?, NULL, ?, ?, ?)'
                 );
-                stmt.run(namespace, key, buffer, expiresAt);
+                stmt.run(namespace, key, buffer, createdAt, expiresAt);
             } else {
                 // STRATEGY B: Disk Storage (File) - Efficient for > 100KB
                 const namespaceDir = path.join(BLOB_DIR, namespace);
@@ -381,9 +383,9 @@ function getCacheManager() {
                 await fs.writeFile(filePath, buffer);
 
                 const stmt = db.prepare(
-                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, data, expires_at) VALUES (?, ?, ?, NULL, ?)'
+                    'INSERT OR REPLACE INTO file_cache (namespace, key, filename, data, created_at, expires_at) VALUES (?, ?, ?, NULL, ?, ?)'
                 );
-                stmt.run(namespace, key, filename, expiresAt);
+                stmt.run(namespace, key, filename, createdAt, expiresAt);
             }
         },
 
@@ -392,19 +394,19 @@ function getCacheManager() {
             validateCacheNamespace(namespace);
             const now = Date.now();
             const row = db
-                .prepare('SELECT filename, data FROM file_cache WHERE namespace = ? AND key = ? AND expires_at > ?')
+                .prepare('SELECT filename, data, created_at FROM file_cache WHERE namespace = ? AND key = ? AND expires_at > ?')
                 .get(namespace, key, now);
 
             if (!row) return null;
 
             // Result is either RAM Buffer or File Path
             if (row.data) {
-                return { type: 'buffer', data: row.data };
+                return { type: 'buffer', data: row.data, createdAt: row.created_at };
             } else if (row.filename) {
                 const filePath = path.join(BLOB_DIR, namespace, row.filename);
                 // Edge case safety: File might have been manually deleted
                 if (!existsSync(filePath)) return null;
-                return { type: 'file', path: filePath };
+                return { type: 'file', path: filePath, createdAt: row.created_at };
             }
             return null;
         },
