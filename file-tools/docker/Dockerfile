@@ -51,7 +51,9 @@ RUN apk add --no-cache \
     font-noto-emoji \
     && adduser -D converter \
     && mkdir -p /app/file-tools-cache \
-    && chown -R converter:converter /app/file-tools-cache
+    && chown -R converter:converter /app/file-tools-cache \
+    && mkdir -p /app/logs \
+    && chown -R converter:converter /app/logs
 
 # Copy node_modules from the builder stage
 COPY --from=builder --chown=converter:converter /app/node_modules ./node_modules
@@ -65,6 +67,9 @@ USER converter
 # Declare the volume for cache data
 # Mount a volume here to persist cache data across container restarts
 VOLUME /app/file-tools-cache
+
+# Declare the volume for logs
+VOLUME /app/logs
 
 EXPOSE 5001
 

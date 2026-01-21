@@ -7,6 +7,17 @@ const helper = require('./server-helper.js');
 const app = new Hono();
 const PORT = 5001;
 
+// Override console methods to include timestamps on logs
+const origLog = console.log;
+console.log = (...args) => {
+  origLog(new Date().toISOString(), ...args);
+};
+
+const origError = console.error;
+console.error = (...args) => {
+  origError(new Date().toISOString(), ...args);
+};
+
 // Error handling middleware
 app.onError((err, c) => {
     console.error(err);

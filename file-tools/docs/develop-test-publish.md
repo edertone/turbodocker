@@ -2,7 +2,7 @@
 
 ## Build & Run Locally
 
-Open a cmd at the file-tools folder and run:
+Open a cmd at the /file-tools folder and run:
 
 ```
 npm run rebuild-start
@@ -10,7 +10,7 @@ npm run rebuild-start
 
 ## Run tests
 
-- Make sure file-tools packages are installed (npm ci)
+- Make sure /file-tools packages are installed (npm ci)
 - Make sure the container is running on your local machine (npm run rebuild-start)
 - Open another cmd at file-tools folder and run:
 

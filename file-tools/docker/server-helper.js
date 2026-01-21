@@ -437,6 +437,8 @@ function getCacheManager() {
             // This is much faster than deleting files one by one
             const namespaceDir = path.join(BLOB_DIR, namespace);
             await fs.rm(namespaceDir, { recursive: true, force: true }).catch(() => {});
+            
+            console.log(`Cleared cache namespace '${namespace}', removed ${info.changes} entries`);
             return info.changes;
         },
 
@@ -448,6 +450,8 @@ function getCacheManager() {
             if (!existsSync(BLOB_DIR)) {
                 mkdirSync(BLOB_DIR, { recursive: true });
             }
+            
+            console.log('Cleared entire cache data');
         },
 
         // Prune expired cache entries (Global, across all namespaces)
@@ -467,6 +471,8 @@ function getCacheManager() {
                     fs.unlink(filePath).catch(e => console.error(`Failed to delete ${filePath}`, e));
                 }
             });
+            
+            console.log(`Pruned ${rows.length} expired cache entries`);
 
             return rows.length;
         }

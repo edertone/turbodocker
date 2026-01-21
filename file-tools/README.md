@@ -18,6 +18,8 @@ services:
         volumes:
             # Persist cache data on the host
             - ./my/local/cache-folder:/app/file-tools-cache
+            # Get the relevant logs on the host
+            - ./my/local/logs-folder:/app/logs
 ```
 
 ## API Documentation
