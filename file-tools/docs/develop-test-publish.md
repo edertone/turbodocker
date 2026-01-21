@@ -26,7 +26,7 @@ npm run test
 
 ```powershell
 docker login; `
-$VERSION = (Get-Content VERSION).Trim(); `
+$VERSION = (Get-Content ../VERSION).Trim(); `
 docker build -t edertone/file-tools:$VERSION .; `
 docker push edertone/file-tools:$VERSION
 ```
