@@ -31,4 +31,4 @@ docker build -t edertone/file-tools:$VERSION .; `
 docker push edertone/file-tools:$VERSION
 ```
 
-- Now increase the value on the docker/VERSION file and commit it to Git indicating which version was published
+- Now increase the value on the file-tools/VERSION file and commit it to Git indicating which version was published
