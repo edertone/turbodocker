@@ -1,0 +1,11 @@
+services:
+  vaultwarden:
+    container_name: vaultwarden
+    environment:
+      ATTACHMENTS_ENABLED: 'true'
+    image: vaultwarden/server:latest
+    ports:
+    - 8083:80
+    restart: no
+    volumes:
+    - ./vw-data:/data
