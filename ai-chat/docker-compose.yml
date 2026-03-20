@@ -50,8 +50,8 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - DEFAULT_MODELS=deepseek-r1:8b
       - WEBUI_AUTH=False
-      - ENABLE_RAG_WEB_SEARCH=True
-      - RAG_WEB_SEARCH_ENGINE=duckduckgo
+      - ENABLE_WEB_SEARCH=True
+      - WEB_SEARCH_ENGINE=duckduckgo
     depends_on:
       ollama:
         condition: service_started
