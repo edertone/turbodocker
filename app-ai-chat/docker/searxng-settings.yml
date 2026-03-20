@@ -1,0 +1,11 @@
+# SearXNG allows overriding settings by modifying an external settings file.
+# The contents of this file will be automatically merged over the defaults.
+use_default_settings: true
+
+server:
+  secret_key: "ai_chat_random_secret_string_here"
+
+search:
+  formats:
+    - html
+    - json
