@@ -1,0 +1,56 @@
+services:
+  # Ollama - LLM inference server
+  # Serves models via REST API on port 11434
+  # Uses NVIDIA GPU acceleration (remove deploy.resources block for CPU-only)
+  # Models are stored in ./ollama_data on the host
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Ollama Init - One-shot model downloader
+  # Runs once on startup, pulls llama3.1:8b and llama3.2:3b if not already present
+  # Skips download on subsequent starts when models are found in ./ollama_data
+  # Check progress with: docker compose logs -f ollama-init
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    depends_on:
+      ollama:
+        condition: service_started
+    volumes:
+      - ./ollama_data:/root/.ollama
+      - ./init-models.sh:/init-models.sh:ro
+    entrypoint: ["sh", "/init-models.sh"]
+    restart: "no"
+
+  # Open WebUI - ChatGPT-style web interface
+  # Accessible at http://localhost:3000
+  # No local user authentication required
+  # Chat history and settings are stored in ./open_webui_data on the host
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - ./open_webui_data:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DEFAULT_MODELS=llama3.1:8b
+      - WEBUI_AUTH=False
+    depends_on:
+      ollama:
+        condition: service_started
+    restart: unless-stopped
