@@ -48,7 +48,7 @@ services:
       - ./data/open_webui_data:/app/backend/data
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - DEFAULT_MODELS=deepseek-r1:8b
+      - DEFAULT_MODELS=llama3.1:8b
       - WEBUI_AUTH=False
       - ENABLE_WEB_SEARCH=True
       - WEB_SEARCH_ENGINE=searxng
