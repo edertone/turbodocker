@@ -32,7 +32,7 @@ docker compose down
 docker compose down ; rm -rf ollama_data open_webui_data
 ```
 
-Open **<http://localhost:3000>** — first visit requires creating a local admin account.
+Open **<http://localhost:3000>**
 
 ## Monitoring
 
