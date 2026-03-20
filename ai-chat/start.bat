@@ -23,14 +23,13 @@ if %errorlevel%==0 (
 docker compose up -d
 
 :: Wait for the web service to be ready
-echo Waiting for http://localhost:3000 to be ready...
+echo Waiting for site to be ready...
 :wait_web
 curl -s -f -o nul http://localhost:3000
 if %errorlevel% neq 0 (
     timeout /t 2 >nul
     goto wait_web
 )
-echo Web service is up and running!
 
 :: Launch browser
 start "" chrome.exe --app=http://localhost:3000 --window-size=1024,768
