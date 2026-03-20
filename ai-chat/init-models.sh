@@ -36,6 +36,11 @@ pull_model "gemma2:9b"
 # Bleeding-edge generation from Google. Fills almost exactly 8GB of VRAM. Slower context processing but massive intelligence for its size.
 pull_model "gemma3:12b"
 
+# DeepSeek-R1 (8 Billion parameters)
+# A powerful "reasoning" model that supports deep thinking processes. Requires ~4.7GB on disk and 6-8GB VRAM for smooth generation.
+# Excellent for complex logic, coding, and step-by-step problem solving.
+pull_model "deepseek-r1:8b"
+
 # this model is very large and not needed for most use cases, so it's commented out by default. Uncomment if you want to pull it.
 # Mixtral 8x7B
 # A massive "Mixture of Experts" model that requires 30-45GB of memory. It will utilize system RAM (slower generation) but offers near GPT-4 level intelligence.
