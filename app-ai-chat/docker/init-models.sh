@@ -20,13 +20,13 @@ pull_model() {
   fi
 }
 
-# Llama 3.1 (8 Billion parameters)
-#An excellent all-around model offering a great balance of logic, coding ability, and speed. Fits well entirely inside an 8GB VRAM GPU.
-pull_model "llama3.1:8b"
-
 # Llama 3.2 (3 Billion parameters)
 # Highly optimized for speed and maximum VRAM efficiency. Perfect for simple tasks or huge context windows, though less capable at deep logic.
 pull_model "llama3.2:3b"
+
+# Llama 3.1 (8 Billion parameters)
+#An excellent all-around model offering a great balance of logic, coding ability, and speed. Fits well entirely inside an 8GB VRAM GPU.
+pull_model "llama3.1:8b"
 
 # DeepSeek-R1 (8 Billion parameters)
 # A powerful "reasoning" model that supports deep thinking processes. Requires ~4.7GB on disk and 6-8GB VRAM for smooth generation.
