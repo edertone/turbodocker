@@ -6,12 +6,14 @@ Local AI chat powered by **Ollama** + **Open WebUI** via Docker Compose.
 
 - **Ollama** — LLM inference server with GPU acceleration (port `11434`)
 - **Open WebUI** — ChatGPT-style web interface (port `3000`)
-- **Auto-downloaded models:** `llama3.1:8b` (~4.7 GB) and `llama3.2:3b` (~2 GB)
+- **SearXNG** - Privacy-respecting local search engine (port `3001`)
+- **Auto-downloaded models:** See docker/init-models.sh for the list of LLMs that are pulled by default.
 
 All data is stored locally in the project folder:
 
-- `./ollama_data/` — downloaded models
-- `./open_webui_data/` — chat history and settings
+- `./data/ollama_data/` — downloaded models
+- `./data/open_webui_data/` — chat history and settings
+- `.data/searxng_data/` — search engine data
 
 ## Prerequisites
 
