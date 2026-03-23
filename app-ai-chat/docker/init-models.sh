@@ -28,22 +28,23 @@ pull_model "llama3.1:8b"
 # Highly optimized for speed and maximum VRAM efficiency. Perfect for simple tasks or huge context windows, though less capable at deep logic.
 pull_model "llama3.2:3b"
 
-# Gemma 2 (9 Billion parameters)
-# Google's model that punches above its weight class. Offers incredibly strong logic and reasoning while just barely fitting inside an 8GB VRAM GPU.
-pull_model "gemma2:9b"
-
-# Gemma 3 (12 Billion parameters)
-# Bleeding-edge generation from Google. Fills almost exactly 8GB of VRAM. Slower context processing but massive intelligence for its size.
-pull_model "gemma3:12b"
-
 # DeepSeek-R1 (8 Billion parameters)
 # A powerful "reasoning" model that supports deep thinking processes. Requires ~4.7GB on disk and 6-8GB VRAM for smooth generation.
 # Excellent for complex logic, coding, and step-by-step problem solving.
 pull_model "deepseek-r1:8b"
 
-# this model is very large and not needed for most use cases, so it's commented out by default. Uncomment if you want to pull it.
-# Mixtral 8x7B
-# A massive "Mixture of Experts" model that requires 30-45GB of memory. It will utilize system RAM (slower generation) but offers near GPT-4 level intelligence.
-# pull_model "mixtral:8x7b"
+# Gemma 3 (12 Billion parameters)
+# Bleeding-edge generation from Google. Fills almost exactly 8GB of VRAM. Slower context processing but massive intelligence for its size.
+pull_model "gemma3:12b"
+
+# this model is very large and will only work with 16GB vram GPUs, so it's commented out by default. Uncomment if you want to pull it.
+# gpt-oss:20b
+# OpenAI’s open-weight models designed for powerful reasoning, agentic tasks, and versatile developer use cases.
+# pull_model "gpt-oss:20b"
+
+# this model is very large and will only work with 24GB vram GPUs, so it's commented out by default. Uncomment if you want to pull it.
+# gemma3:27b
+# The current, most capable model that runs on a single GPU
+# pull_model "gemma3:27b"
 
 echo "All models ready."
